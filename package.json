@@ -1,7 +1,8 @@
 {
 	"type": "module",
 	"scripts": {
-		"build": "dotenv -e .env -- turbo run build",
+		"build": "node capture2u/scripts/build-from-repo-root.mjs",
+		"build:cap": "dotenv -e .env -- turbo run build",
 		"build:web": "turbo run build:web",
 		"build:web:docker": "bun run --filter=@cap/web build:docker",
 		"cap-setup": "dotenv -e .env -- node scripts/setup.js",

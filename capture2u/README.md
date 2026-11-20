@@ -39,15 +39,14 @@ Local development needs a `.dev.vars` file (see `.dev.vars.example`) and, becaus
 
 ## Deploying
 
-The Worker is deployed by Cloudflare from this repository (Workers Builds). When connecting the repository to the Worker, use:
+The Worker is deployed by Cloudflare from this repository (Workers Builds) on every push to `main`. It works with Cloudflare's default settings, with no root directory set:
 
 | Field | Value |
 |---|---|
-| Worker name | `capture2u` (must match `wrangler.jsonc`) |
-| Branch | `main` |
-| Root directory | `capture2u` |
-| Build command | `npm run build` |
+| Build command | `bun run build` (or `npm run build`) |
 | Deploy command | `npx wrangler deploy` |
+
+The repository's top-level `build` script builds only this app (`scripts/build-from-repo-root.mjs`) and leaves a pointer so the deploy command picks it up. Cap's original build is kept as `build:cap`. Setting the root directory to `capture2u` with build command `npm run build` also works and skips installing Cap's dependencies.
 
 Already created on the Locate Technologies accounts:
 
