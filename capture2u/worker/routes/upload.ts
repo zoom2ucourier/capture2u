@@ -222,7 +222,11 @@ upload.post("/multipart/complete", requireUser, async (c) => {
 
 	let processingStarted = true;
 	try {
-		await c.env.JOBS.send({ type: "process-video", videoId: video.id });
+		await c.env.JOBS.send({
+			type: "process-video",
+			videoId: video.id,
+			origin: new URL(c.req.url).origin,
+		});
 	} catch (queueError) {
 		processingStarted = false;
 		console.error("Could not queue processing", queueError);

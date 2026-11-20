@@ -19,15 +19,12 @@
 	},
 	"triggers": { "crons": ["0 16 * * *"] },
 	"observability": { "enabled": true },
+	// Variables and secrets added in the Cloudflare dashboard are kept on every
+	// deploy. Only the two public Supabase values are set here; a name listed
+	// here would overwrite a dashboard value of the same name.
+	"keep_vars": true,
 	"vars": {
-		"PUBLIC_BASE_URL": "https://capture2u.locate2u.com",
-		"SUPABASE_URL": "",
-		"SUPABASE_ANON_KEY": "",
-		"ALLOWED_EMAIL_DOMAINS": "zoom2u.com,locate2u.com,locatetech.nz,freightmatch.com.au",
-		"RETENTION_MODE": "report",
-		"RETENTION_DAYS": "365",
-		"RETENTION_MAX_PER_RUN": "200",
-		"TRANSCRIBE_MODEL": "assemblyai/universal-3.5-pro",
-		"SUMMARY_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+		"SUPABASE_URL": "https://frbjfigqvxosswdhdjqi.supabase.co",
+		"SUPABASE_ANON_KEY": "sb_publishable_MgIYtp2z391wb4ad7c1ZSg_1Sx4x6_B"
 	}
 }

@@ -32,42 +32,55 @@ npm run typecheck
 npm test
 npm run build
 npm run dev        # local site + Worker
-npm run deploy     # build and deploy to Cloudflare
+npm run deploy     # manual deploy; normally Cloudflare deploys on push
 ```
 
 Local development needs a `.dev.vars` file (see `.dev.vars.example`) and, because the account has more than one Cloudflare account attached, `CLOUDFLARE_ACCOUNT_ID` set in the shell.
 
-## First-time setup
+## Deploying
 
-Each step creates something on a company account. Get approval first.
+The Worker is deployed by Cloudflare from this repository (Workers Builds). When connecting the repository to the Worker, use:
 
-1. **Supabase project** in `ap-southeast-2` on the Locate Technologies org. Apply `supabase/migrations/0001_init.sql`.
-2. **Google sign-in** in the Supabase project: Authentication > Providers > Google, with a Google Cloud OAuth client. Add `https://capture2u.locate2u.com` to the allowed redirect URLs.
-3. **Cloudflare resources:**
-   ```bash
-   npx wrangler r2 bucket create capture2u-videos
-   npx wrangler queues create capture2u-jobs
-   ```
-   Add a lifecycle rule on the bucket to abort unfinished multipart uploads after 7 days. Do not add any rule that deletes objects; retention is done by the Worker so the Keep flag is respected.
-4. **Settings** in `wrangler.jsonc` under `vars`: `SUPABASE_URL` and `SUPABASE_ANON_KEY` (the publishable key).
-5. **Secrets:**
-   ```bash
-   npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-   npx wrangler secret put MEDIA_TOKEN_SECRET     # openssl rand -hex 32
-   ```
-6. **Deploy:** `npm run deploy`, then attach the custom domain `capture2u.locate2u.com` to the Worker.
+| Field | Value |
+|---|---|
+| Worker name | `capture2u` (must match `wrangler.jsonc`) |
+| Branch | `main` |
+| Root directory | `capture2u` |
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy` |
+
+Already created on the Locate Technologies accounts:
+
+- Supabase project `capture2u` (`frbjfigqvxosswdhdjqi`, Sydney) with `supabase/migrations/0001_init.sql` applied.
+- R2 bucket `capture2u-videos` (Oceania). Unfinished uploads are cleared after 7 days by a bucket rule. Do not add any rule that deletes objects; retention is done by the Worker so the Keep flag is respected.
+- Queue `capture2u-jobs`.
+
+Still to do by hand:
+
+1. **Secret:** in the Worker's Settings > Variables and Secrets, add `SUPABASE_SERVICE_ROLE_KEY` as a secret (Supabase > Project Settings > API keys > secret key).
+2. **Google sign-in:** in the Supabase project, Authentication > Sign In / Providers > Google, with a Google Cloud OAuth client whose redirect address is `https://frbjfigqvxosswdhdjqi.supabase.co/auth/v1/callback`. Turn the Email provider off.
+3. **Addresses:** in Supabase, Authentication > URL Configuration, set the Site URL to the app's address and add `<address>/**` to the redirect list.
+4. **Custom domain:** attach `capture2u.locate2u.com` to the Worker.
 
 ## Settings
 
-| Name | Meaning |
-|---|---|
-| `PUBLIC_BASE_URL` | The public address. Used when the speech model fetches a recording. |
-| `ALLOWED_EMAIL_DOMAINS` | Comma-separated. Exact match, so sub-domains must be listed. Keep in step with the `allowed_email_domains` table. |
-| `RETENTION_MODE` | `report` or `delete` |
-| `RETENTION_DAYS` | Default 365, minimum 30 |
-| `RETENTION_MAX_PER_RUN` | Most videos deleted in one night. Default 200. |
-| `TRANSCRIBE_MODEL` | Workers AI speech model. `assemblyai/universal-3.5-pro` reads the file by URL. `@cf/openai/whisper-large-v3-turbo` is cheaper but only handles recordings under 24 MB. |
-| `SUMMARY_MODEL` | Workers AI text model for title, summary and chapters |
+Settings are managed in the Cloudflare dashboard (Worker > Settings > Variables and Secrets). `keep_vars` is on, so anything added there survives every deploy. Do not add these names to `wrangler.jsonc`: a value there would overwrite the dashboard on each deploy.
+
+Only `SUPABASE_SERVICE_ROLE_KEY` is required. Everything else has a default.
+
+| Name | Default | Meaning |
+|---|---|---|
+| `SUPABASE_SERVICE_ROLE_KEY` | none (required, secret) | Lets the Worker read and write the database. |
+| `ALLOWED_EMAIL_DOMAINS` | the four company domains | Comma-separated. Exact match, so sub-domains must be listed. Keep in step with the `allowed_email_domains` table. |
+| `RETENTION_MODE` | `report` | `report` or `delete`. Nothing is deleted unless this is exactly `delete`. |
+| `RETENTION_DAYS` | `365` | Minimum 30. |
+| `RETENTION_MAX_PER_RUN` | `200` | Most videos deleted in one night. |
+| `TRANSCRIBE_MODEL` | `assemblyai/universal-3.5-pro` | Workers AI speech model. `@cf/openai/whisper-large-v3-turbo` is cheaper but only handles recordings under 24 MB. |
+| `SUMMARY_MODEL` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | Workers AI text model for title, summary and chapters. |
+| `PUBLIC_BASE_URL` | the address the request came in on | Only needed to force one address. |
+| `MEDIA_TOKEN_SECRET` | derived from the service key | Optional separate secret for signing playback links. Changing it expires links already issued. |
+
+`SUPABASE_URL` and `SUPABASE_ANON_KEY` are public values and are set in `wrangler.jsonc`.
 
 ## Checks after the first deploy
 

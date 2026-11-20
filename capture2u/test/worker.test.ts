@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SessionUser } from "../worker/env";
+import type { RawEnv, SessionUser } from "../worker/env";
 import { readRetentionConfig, retentionCutoff } from "../worker/jobs/retention";
 import { hashPassword, verifyPassword } from "../worker/lib/password";
 import { createToken, verifyToken } from "../worker/lib/tokens";
@@ -19,6 +19,7 @@ import {
 	parseRangeHeader,
 } from "../worker/lib/util";
 import { checkAccess } from "../worker/routes/watch";
+import { DEFAULT_SETTINGS, resolveEnv } from "../worker/settings";
 
 const SECRET = "test-secret-value";
 const NOW = Date.UTC(2026, 10, 20);
@@ -394,5 +395,49 @@ describe("AI summary parsing", () => {
 			summary: null,
 			chapters: [],
 		});
+	});
+});
+
+describe("settings", () => {
+	const bindings = {} as RawEnv;
+
+	it("falls back to safe defaults when nothing is set in the dashboard", () => {
+		const env = resolveEnv({ ...bindings, SUPABASE_SERVICE_ROLE_KEY: "key" });
+		expect(env.RETENTION_MODE).toBe("report");
+		expect(env.RETENTION_DAYS).toBe("365");
+		expect(parseAllowedDomains(env.ALLOWED_EMAIL_DOMAINS)).toContain(
+			"locate2u.com",
+		);
+		expect(env.TRANSCRIBE_MODEL).toBe(DEFAULT_SETTINGS.TRANSCRIBE_MODEL);
+		expect(env.MEDIA_TOKEN_SECRET).not.toBe("");
+		expect(env.MEDIA_TOKEN_SECRET).not.toBe("key");
+	});
+
+	it("lets dashboard values win over defaults", () => {
+		const env = resolveEnv(
+			{
+				...bindings,
+				RETENTION_MODE: "delete",
+				ALLOWED_EMAIL_DOMAINS: "example.com",
+				MEDIA_TOKEN_SECRET: "own-secret",
+				PUBLIC_BASE_URL: "https://videos.example.com/",
+			},
+			"https://other.example.com",
+		);
+		expect(env.RETENTION_MODE).toBe("delete");
+		expect(env.ALLOWED_EMAIL_DOMAINS).toBe("example.com");
+		expect(env.MEDIA_TOKEN_SECRET).toBe("own-secret");
+		expect(env.PUBLIC_BASE_URL).toBe("https://videos.example.com");
+	});
+
+	it("uses the address the request came in on when none is set", () => {
+		expect(
+			resolveEnv(bindings, "https://capture2u.example.workers.dev")
+				.PUBLIC_BASE_URL,
+		).toBe("https://capture2u.example.workers.dev");
+	});
+
+	it("has no signing secret until the service key is added", () => {
+		expect(resolveEnv(bindings).MEDIA_TOKEN_SECRET).toBe("");
 	});
 });

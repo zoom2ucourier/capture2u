@@ -55,7 +55,9 @@ async function transcribe(env: Env, video: VideoRow) {
 		video.id,
 		MEDIA_FETCH_TOKEN_TTL_SECONDS,
 	);
-	const audioUrl = `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/media/${video.id}/video?t=${encodeURIComponent(token)}`;
+	if (!env.PUBLIC_BASE_URL)
+		throw new Error("No public address is known for this video");
+	const audioUrl = `${env.PUBLIC_BASE_URL}/media/${video.id}/video?t=${encodeURIComponent(token)}`;
 	const raw = await runModel(env, model, { audio_url: audioUrl });
 	return normalizeTranscript(raw, {
 		timesInMilliseconds: model.startsWith("assemblyai/"),

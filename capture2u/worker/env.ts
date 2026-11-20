@@ -1,10 +1,17 @@
-export type JobMessage = { type: "process-video"; videoId: string };
+export type JobMessage = {
+	type: "process-video";
+	videoId: string;
+	origin?: string;
+};
 
-export interface Env {
+export interface Bindings {
 	ASSETS: Fetcher;
 	VIDEOS: R2Bucket;
 	AI: Ai;
 	JOBS: Queue<JobMessage>;
+}
+
+export interface Settings {
 	PUBLIC_BASE_URL: string;
 	SUPABASE_URL: string;
 	SUPABASE_ANON_KEY: string;
@@ -17,6 +24,9 @@ export interface Env {
 	TRANSCRIBE_MODEL: string;
 	SUMMARY_MODEL: string;
 }
+
+export type Env = Bindings & Settings;
+export type RawEnv = Bindings & Partial<Settings>;
 
 export interface SessionUser {
 	id: string;

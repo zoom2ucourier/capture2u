@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { PublicConfig } from "../shared/types";
 import { requireUser } from "./auth";
 import { adminClient, getVideo } from "./db";
-import type { AppBindings, Env, JobMessage } from "./env";
+import type { AppBindings, JobMessage, RawEnv } from "./env";
 import { markProcessingFailed, processVideo } from "./jobs/process";
 import { cleanStaleUploads, runRetention } from "./jobs/retention";
 import { isVideoId, parseAllowedDomains, positiveInt } from "./lib/util";
@@ -10,6 +10,7 @@ import { media } from "./routes/media";
 import { upload } from "./routes/upload";
 import { videos } from "./routes/videos";
 import { watch } from "./routes/watch";
+import { resolveEnv } from "./settings";
 
 const app = new Hono<AppBindings>();
 
@@ -106,11 +107,13 @@ app.get("/v/:id", async (c) => {
 });
 
 export default {
-	fetch: app.fetch,
+	fetch: (request: Request, raw: RawEnv, ctx: ExecutionContext) =>
+		app.fetch(request, resolveEnv(raw, new URL(request.url).origin), ctx),
 
-	async queue(batch: MessageBatch<JobMessage>, env: Env) {
+	async queue(batch: MessageBatch<JobMessage>, raw: RawEnv) {
 		for (const message of batch.messages) {
 			const job = message.body;
+			const env = resolveEnv(raw, job?.origin);
 			if (job?.type !== "process-video" || !isVideoId(job.videoId)) {
 				message.ack();
 				continue;
@@ -132,9 +135,10 @@ export default {
 
 	async scheduled(
 		_controller: ScheduledController,
-		env: Env,
+		raw: RawEnv,
 		ctx: ExecutionContext,
 	) {
+		const env = resolveEnv(raw);
 		ctx.waitUntil(
 			(async () => {
 				await cleanStaleUploads(env).catch((error) =>
@@ -146,4 +150,4 @@ export default {
 			})(),
 		);
 	},
-} satisfies ExportedHandler<Env, JobMessage>;
+} satisfies ExportedHandler<RawEnv, JobMessage>;
