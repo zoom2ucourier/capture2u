@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -31,4 +31,33 @@ writeFileSync(
 		auxiliaryWorkers: [],
 	}),
 );
+
+// Cap's own dependencies install an old Wrangler 3 at the top of the repo,
+// which is what `npx wrangler` would pick up and which rejects this app's
+// configuration. On the build server, point that command at the app's Wrangler.
+const rootBin = join(repoRoot, "node_modules", ".bin");
+if ((process.env.CI || process.env.WORKERS_CI) && existsSync(rootBin)) {
+	const appWrangler = join(
+		appDir,
+		"node_modules",
+		"wrangler",
+		"bin",
+		"wrangler.js",
+	);
+	for (const name of ["wrangler", "wrangler2"]) {
+		const shim = join(rootBin, name);
+		rmSync(shim, { force: true });
+		writeFileSync(
+			shim,
+			`#!/bin/sh
+exec node "${appWrangler}" "$@"
+`,
+			{
+				mode: 0o755,
+			},
+		);
+	}
+	console.log("Deploys will use the Capture2u app's Wrangler.");
+}
+
 console.log("Capture2u built. Deploy with: npx wrangler deploy");
