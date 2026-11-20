@@ -1,0 +1,14 @@
+{
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"lib": ["ES2022", "DOM", "DOM.Iterable"],
+		"jsx": "react-jsx",
+		"types": ["vite/client"],
+		"paths": {
+			"@cap/recorder-core": ["../packages/recorder-core/src/index.ts"],
+			"@cap/recorder-core/*": ["../packages/recorder-core/src/*"],
+			"@cap/web-domain": ["./shims/cap-web-domain.d.ts"]
+		}
+	},
+	"include": ["src", "shared", "shims"]
+}

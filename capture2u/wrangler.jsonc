@@ -1,0 +1,33 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "capture2u",
+	"main": "worker/index.ts",
+	"compatibility_date": "2026-11-01",
+	"compatibility_flags": ["nodejs_compat"],
+	"assets": {
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": ["/api/*", "/media/*", "/v/*"]
+	},
+	"r2_buckets": [{ "binding": "VIDEOS", "bucket_name": "capture2u-videos" }],
+	"ai": { "binding": "AI" },
+	"queues": {
+		"producers": [{ "binding": "JOBS", "queue": "capture2u-jobs" }],
+		"consumers": [
+			{ "queue": "capture2u-jobs", "max_batch_size": 1, "max_retries": 3 }
+		]
+	},
+	"triggers": { "crons": ["0 16 * * *"] },
+	"observability": { "enabled": true },
+	"vars": {
+		"PUBLIC_BASE_URL": "https://capture2u.locate2u.com",
+		"SUPABASE_URL": "",
+		"SUPABASE_ANON_KEY": "",
+		"ALLOWED_EMAIL_DOMAINS": "zoom2u.com,locate2u.com,locatetech.nz,freightmatch.com.au",
+		"RETENTION_MODE": "report",
+		"RETENTION_DAYS": "365",
+		"RETENTION_MAX_PER_RUN": "200",
+		"TRANSCRIBE_MODEL": "assemblyai/universal-3.5-pro",
+		"SUMMARY_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+	}
+}
