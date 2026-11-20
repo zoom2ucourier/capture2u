@@ -1,0 +1,165 @@
+name: capture2u
+
+services:
+  workflow-data-init:
+    image: busybox:1.36
+    command: ["sh", "-c", "chown -R 1001:1001 /data/workflow"]
+    volumes:
+      - workflow-data:/data/workflow
+    restart: "no"
+
+  cap-web:
+    image: ${CAPTURE2U_WEB_IMAGE:?set CAPTURE2U_WEB_IMAGE in .env}
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      workflow-data-init:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      WEB_URL: ${CAPTURE2U_URL:?set CAPTURE2U_URL in .env}
+      NEXTAUTH_URL: ${CAPTURE2U_URL}
+      DATABASE_URL: mysql://cap:${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}@mysql:3306/cap
+      DATABASE_ENCRYPTION_KEY: ${DATABASE_ENCRYPTION_KEY:?set DATABASE_ENCRYPTION_KEY in .env}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?set NEXTAUTH_SECRET in .env}
+      MEDIA_SERVER_WEBHOOK_SECRET: ${MEDIA_SERVER_WEBHOOK_SECRET:?set MEDIA_SERVER_WEBHOOK_SECRET in .env}
+      CRON_SECRET: ${CRON_SECRET:?set CRON_SECRET in .env}
+
+      CAP_AWS_BUCKET: ${R2_BUCKET:?set R2_BUCKET in .env}
+      CAP_AWS_REGION: auto
+      CAP_AWS_ACCESS_KEY: ${R2_ACCESS_KEY_ID:?set R2_ACCESS_KEY_ID in .env}
+      CAP_AWS_SECRET_KEY: ${R2_SECRET_ACCESS_KEY:?set R2_SECRET_ACCESS_KEY in .env}
+      S3_PUBLIC_ENDPOINT: ${R2_ENDPOINT:?set R2_ENDPOINT in .env}
+      S3_INTERNAL_ENDPOINT: ${R2_ENDPOINT}
+      S3_PATH_STYLE: "true"
+
+      CAP_ALLOWED_SIGNUP_DOMAINS: ${CAP_ALLOWED_SIGNUP_DOMAINS:?set CAP_ALLOWED_SIGNUP_DOMAINS in .env}
+      CAP_BLOCKED_SIGNUP_DOMAINS: ${CAP_BLOCKED_SIGNUP_DOMAINS:-}
+      CAP_VIDEOS_DEFAULT_PUBLIC: ${CAP_VIDEOS_DEFAULT_PUBLIC:-true}
+      CAP_CHROME_EXTENSION_ID: ${CAP_CHROME_EXTENSION_ID:-fefjaffcodfiogbbngmjkcjpbpclbdcp}
+
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+
+      CAPTURE2U_EMAIL_PROVIDER: ${CAPTURE2U_EMAIL_PROVIDER:-}
+      CAPTURE2U_SES_REGION: ${CAPTURE2U_SES_REGION:-}
+      CAPTURE2U_SES_ACCESS_KEY_ID: ${CAPTURE2U_SES_ACCESS_KEY_ID:-}
+      CAPTURE2U_SES_SECRET_ACCESS_KEY: ${CAPTURE2U_SES_SECRET_ACCESS_KEY:-}
+      CAPTURE2U_EMAIL_FROM: ${CAPTURE2U_EMAIL_FROM:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_DOMAIN: ${RESEND_FROM_DOMAIN:-}
+
+      ASSEMBLY_API_KEY: ${ASSEMBLY_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+
+      TINYBIRD_HOST: ${TINYBIRD_HOST:-}
+      TINYBIRD_TOKEN: ${TINYBIRD_TOKEN:-}
+
+      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
+      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
+
+      CAPTURE2U_RETENTION_MODE: ${CAPTURE2U_RETENTION_MODE:-report}
+      CAPTURE2U_RETENTION_DAYS: ${CAPTURE2U_RETENTION_DAYS:-365}
+      CAPTURE2U_RETENTION_MAX_PER_RUN: ${CAPTURE2U_RETENTION_MAX_PER_RUN:-200}
+
+      MEDIA_SERVER_URL: http://media-server:3456
+      MEDIA_SERVER_WEBHOOK_URL: http://cap-web:3000
+
+      WORKFLOW_TARGET_WORLD: local
+      WORKFLOW_LOCAL_DATA_DIR: /data/workflow
+    volumes:
+      - workflow-data:/data/workflow
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    networks:
+      - capture2u
+
+  media-server:
+    image: ${CAPTURE2U_MEDIA_SERVER_IMAGE:?set CAPTURE2U_MEDIA_SERVER_IMAGE in .env}
+    restart: unless-stopped
+    environment:
+      PORT: "3456"
+      MEDIA_SERVER_WEBHOOK_SECRET: ${MEDIA_SERVER_WEBHOOK_SECRET}
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:3456/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - capture2u
+
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: cap
+      MYSQL_USER: cap
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+    command:
+      - --max_connections=300
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u cap -p\"$$MYSQL_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - capture2u
+
+  scheduler:
+    build:
+      context: ./scheduler
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      CAP_WEB_INTERNAL_URL: http://cap-web:3000
+      CRON_SECRET: ${CRON_SECRET}
+      MYSQL_HOST: mysql
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      BACKUP_ENCRYPTION_PASSPHRASE: ${BACKUP_ENCRYPTION_PASSPHRASE:?set BACKUP_ENCRYPTION_PASSPHRASE in .env}
+      BACKUP_R2_BUCKET: ${BACKUP_R2_BUCKET:?set BACKUP_R2_BUCKET in .env}
+      BACKUP_R2_ENDPOINT: ${R2_ENDPOINT}
+      BACKUP_R2_ACCESS_KEY_ID: ${BACKUP_R2_ACCESS_KEY_ID:?set BACKUP_R2_ACCESS_KEY_ID in .env}
+      BACKUP_R2_SECRET_ACCESS_KEY: ${BACKUP_R2_SECRET_ACCESS_KEY:?set BACKUP_R2_SECRET_ACCESS_KEY in .env}
+      BACKUP_AT_UTC: ${BACKUP_AT_UTC:-16:00}
+      RETENTION_AT_UTC: ${RETENTION_AT_UTC:-17:00}
+    volumes:
+      - scheduler-state:/var/lib/capture2u
+    networks:
+      - capture2u
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    depends_on:
+      cap-web:
+        condition: service_started
+    networks:
+      - capture2u
+
+volumes:
+  mysql-data:
+  workflow-data:
+  scheduler-state:
+
+networks:
+  capture2u:
+    driver: bridge

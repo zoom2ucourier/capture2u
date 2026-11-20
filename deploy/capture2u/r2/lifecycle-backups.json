@@ -1,0 +1,12 @@
+{
+	"rules": [
+		{
+			"id": "expire-old-database-backups",
+			"enabled": true,
+			"conditions": { "prefix": "mysql/" },
+			"deleteObjectsTransition": {
+				"condition": { "type": "Age", "maxAge": 3024000 }
+			}
+		}
+	]
+}

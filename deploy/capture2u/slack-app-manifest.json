@@ -1,0 +1,35 @@
+{
+	"_metadata": {
+		"major_version": 1,
+		"minor_version": 1
+	},
+	"display_information": {
+		"name": "Capture2u",
+		"description": "Play Capture2u videos directly inside Slack.",
+		"background_color": "#1e60e6"
+	},
+	"features": {
+		"bot_user": {
+			"display_name": "capture2u",
+			"always_online": false
+		},
+		"unfurl_domains": ["capture2u.locate2u.com"]
+	},
+	"oauth_config": {
+		"redirect_urls": [
+			"https://capture2u.locate2u.com/api/integrations/slack/callback"
+		],
+		"scopes": {
+			"bot": ["links:read", "links:write", "links.embed:write"]
+		}
+	},
+	"settings": {
+		"event_subscriptions": {
+			"request_url": "https://capture2u.locate2u.com/api/integrations/slack/events",
+			"bot_events": ["link_shared", "app_uninstalled"]
+		},
+		"org_deploy_enabled": false,
+		"socket_mode_enabled": false,
+		"token_rotation_enabled": false
+	}
+}

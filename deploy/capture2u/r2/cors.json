@@ -1,0 +1,9 @@
+[
+	{
+		"AllowedOrigins": ["https://capture2u.locate2u.com"],
+		"AllowedMethods": ["GET", "HEAD", "PUT", "POST"],
+		"AllowedHeaders": ["*"],
+		"ExposeHeaders": ["ETag"],
+		"MaxAgeSeconds": 3000
+	}
+]

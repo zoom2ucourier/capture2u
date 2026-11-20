@@ -72,6 +72,7 @@ import { SharingDialog } from "../SharingDialog";
 import { CapCardAnalytics, capAnalyticsHref } from "./CapCardAnalytics";
 import { CapCardButton } from "./CapCardButton";
 import { CapCardContent } from "./CapCardContent";
+import { KeepMenuItem } from "./KeepMenuItem";
 
 const CustomThumbnailDialog = dynamic(
 	() => import("@/components/custom-thumbnail/CustomThumbnailDialog"),
@@ -702,6 +703,10 @@ export const CapCard = ({
 											{passwordProtected ? "Edit password" : "Add password"}
 										</p>
 									</DropdownMenuItem>
+									<KeepMenuItem
+										videoId={cap.id}
+										initialKeep={cap.metadata?.keep === true}
+									/>
 									{onArchiveToggle && (
 										<DropdownMenuItem
 											onClick={(e) => {

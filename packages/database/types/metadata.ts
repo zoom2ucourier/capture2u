@@ -93,6 +93,10 @@ export interface VideoMetadata {
 	 */
 	customCreatedAt?: string;
 	/**
+	 * Capture2u: exempts the video from the retention job
+	 */
+	keep?: boolean;
+	/**
 	 * Title of the captured monitor or window
 	 */
 	sourceName?: string;

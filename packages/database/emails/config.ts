@@ -1,6 +1,7 @@
 import { buildEnv, serverEnv } from "@cap/env";
 import type { JSXElementConstructor, ReactElement } from "react";
 import { Resend } from "resend";
+import { getSesConfig, isSesSelected, sendViaSes } from "./capture2u-ses";
 
 export const resend = () =>
 	serverEnv().RESEND_API_KEY ? new Resend(serverEnv().RESEND_API_KEY) : null;
@@ -12,6 +13,15 @@ export type EmailDeliveryStatus =
 	| { configured: false; reason: string };
 
 export function getEmailDeliveryStatus(): EmailDeliveryStatus {
+	if (isSesSelected()) {
+		return getSesConfig()
+			? { configured: true }
+			: {
+					configured: false,
+					reason:
+						"Email (SES) is not configured: CAPTURE2U_SES_REGION, CAPTURE2U_SES_ACCESS_KEY_ID, CAPTURE2U_SES_SECRET_ACCESS_KEY and CAPTURE2U_EMAIL_FROM are all required",
+				};
+	}
 	const env = serverEnv();
 	if (!env.RESEND_API_KEY) {
 		return {
@@ -77,6 +87,19 @@ export const sendEmail = async ({
 		contentType?: string;
 	}[];
 }): Promise<SendEmailResult | undefined> => {
+	if (isSesSelected()) {
+		if (marketing) return;
+		const ses = getSesConfig();
+		if (!ses) {
+			const reason = "Email (SES) is not configured";
+			warnEmailNotConfigured(reason);
+			return {
+				data: null,
+				error: { name: "email_not_configured", message: reason },
+			};
+		}
+		return sendViaSes(ses, { to: email, subject, react, cc, replyTo, test });
+	}
 	const env = serverEnv();
 	const r = resend();
 	if (!env.RESEND_API_KEY || !r) {

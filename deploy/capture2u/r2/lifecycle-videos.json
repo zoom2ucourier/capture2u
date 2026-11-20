@@ -1,0 +1,12 @@
+{
+	"rules": [
+		{
+			"id": "abort-abandoned-uploads",
+			"enabled": true,
+			"conditions": {},
+			"abortMultipartUploadsTransition": {
+				"condition": { "type": "Age", "maxAge": 604800 }
+			}
+		}
+	]
+}
