@@ -7,7 +7,7 @@ import type {
 	Visibility,
 } from "../shared/types";
 import type { Env } from "./env";
-import { videoObjectPrefix } from "./lib/util";
+import { displayName, videoObjectPrefix } from "./lib/util";
 
 export interface VideoRow {
 	id: string;
@@ -116,9 +116,7 @@ export async function profileNames(db: SupabaseClient, ids: string[]) {
 	for (const row of data ?? [])
 		names.set(
 			row.id as string,
-			(row.full_name as string | null) ||
-				(row.email as string).split("@")[0] ||
-				"Someone",
+			displayName(row.full_name as string | null, row.email as string | null),
 		);
 	return names;
 }

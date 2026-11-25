@@ -243,6 +243,40 @@ videos.patch("/:id", async (c) => {
 	});
 });
 
+videos.post("/:id/reprocess", async (c) => {
+	const user = c.get("user");
+	const id = c.req.param("id");
+	if (!isVideoId(id)) return c.json({ error: "not_found" }, 404);
+	const db = adminClient(c.env);
+	const video = await getVideo(db, id);
+	if (!video) return c.json({ error: "not_found" }, 404);
+	if (video.owner_id !== user.id && user.role !== "admin")
+		return c.json({ error: "forbidden" }, 403);
+	if (
+		video.status !== "ready" ||
+		(video.transcript_status !== "failed" && video.ai_status !== "failed")
+	)
+		return c.json({ error: "nothing_to_retry" }, 409);
+
+	const { error } = await db
+		.from("videos")
+		.update({
+			transcript_status:
+				video.transcript_status === "failed"
+					? "pending"
+					: video.transcript_status,
+			ai_status: "pending",
+		})
+		.eq("id", id);
+	if (error) throw new Error(`Could not restart processing: ${error.message}`);
+	await c.env.JOBS.send({
+		type: "process-video",
+		videoId: id,
+		origin: new URL(c.req.url).origin,
+	});
+	return c.json({ queued: true });
+});
+
 videos.delete("/:id", async (c) => {
 	const user = c.get("user");
 	const id = c.req.param("id");

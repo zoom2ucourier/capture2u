@@ -2,9 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { VideoRow } from "../db";
 import type { Env, SessionUser } from "../env";
 import { commentEmail, firstViewEmail, sendEmail } from "./email";
+import { displayName } from "./util";
 
-const displayName = (user: SessionUser) =>
-	user.fullName || user.email.split("@")[0] || "Someone";
+const actorName = (user: SessionUser) => displayName(user.fullName, user.email);
 
 async function recipients(db: SupabaseClient, ids: string[]) {
 	if (ids.length === 0) return new Map<string, string>();
@@ -41,7 +41,7 @@ export async function notifyComment(
 			env,
 			commentEmail({
 				to,
-				actorName: displayName(actor),
+				actorName: actorName(actor),
 				videoTitle: video.title,
 				body: comment.body,
 				url,
@@ -71,7 +71,7 @@ export async function notifyFirstView(
 		env,
 		firstViewEmail({
 			to,
-			viewerName: viewer ? displayName(viewer) : null,
+			viewerName: viewer ? actorName(viewer) : null,
 			videoTitle: video.title,
 			url: `${env.PUBLIC_BASE_URL}/v/${video.id}`,
 		}),

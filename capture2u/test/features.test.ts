@@ -9,6 +9,7 @@ import {
 } from "../worker/lib/login";
 import { hmacSha256Hex } from "../worker/lib/tokens";
 import {
+	displayName,
 	embedHtml,
 	isUuid,
 	normalizeTrim,
@@ -271,5 +272,14 @@ describe("embed and Slack", () => {
 				NOW,
 			),
 		).toBe(false);
+	});
+});
+
+describe("names", () => {
+	it("uses the saved name, then a name built from the email", () => {
+		expect(displayName("Jo Smith", "jo@zoom2u.com")).toBe("Jo Smith");
+		expect(displayName(null, "jo.smith@zoom2u.com")).toBe("Jo Smith");
+		expect(displayName("  ", "jiro@locate2u.com")).toBe("Jiro");
+		expect(displayName(null, null)).toBe("Someone");
 	});
 });

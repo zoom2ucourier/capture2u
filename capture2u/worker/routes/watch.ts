@@ -8,6 +8,7 @@ import { notifyFirstView } from "../lib/notify";
 import { verifyPassword } from "../lib/password";
 import { createToken, sha256Hex, verifyToken } from "../lib/tokens";
 import {
+	displayName,
 	expiryDate,
 	isVideoId,
 	positiveInt,
@@ -105,7 +106,7 @@ watch.get("/:id", async (c) => {
 
 	const { data: owner } = await db
 		.from("profiles")
-		.select("full_name,avatar_url")
+		.select("full_name,email,avatar_url")
 		.eq("id", video.owner_id)
 		.maybeSingle();
 
@@ -140,7 +141,12 @@ watch.get("/:id", async (c) => {
 					positiveInt(c.env.RETENTION_DAYS, 365),
 				)
 			: null,
-		ownerName: (owner?.full_name as string | null) ?? null,
+		ownerName: owner
+			? displayName(
+					owner.full_name as string | null,
+					owner.email as string | null,
+				)
+			: null,
 		ownerAvatarUrl: (owner?.avatar_url as string | null) ?? null,
 		durationSeconds: isOwner
 			? video.duration_seconds

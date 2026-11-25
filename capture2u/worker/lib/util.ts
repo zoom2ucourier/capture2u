@@ -134,6 +134,18 @@ export function trimmedDuration(durationSeconds: number | null, trim: Trim) {
 	return Math.max(0, end - (trim.start ?? 0));
 }
 
+export const nameFromEmail = (email: string) =>
+	(email.split("@")[0] ?? "")
+		.split(/[._-]+/)
+		.filter(Boolean)
+		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+		.join(" ");
+
+export const displayName = (
+	fullName: string | null | undefined,
+	email: string | null | undefined,
+) => fullName?.trim() || (email ? nameFromEmail(email) : "") || "Someone";
+
 export const escapeHtml = (value: string) =>
 	value
 		.replace(/&/g, "&amp;")

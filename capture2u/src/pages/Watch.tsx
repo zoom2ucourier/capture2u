@@ -57,6 +57,7 @@ export function Watch() {
 	const [editingTrim, setEditingTrim] = useState(false);
 	const [commentSignIn, setCommentSignIn] = useState(false);
 	const playerRef = useRef<PlayerHandle | null>(null);
+	const [retrying, setRetrying] = useState(false);
 	const viewSentRef = useRef(false);
 	const playbackRef = useRef<WatchVideo["playback"]>(null);
 
@@ -120,6 +121,18 @@ export function Watch() {
 			void load();
 		} catch {
 			setState({ kind: "password", wrong: true });
+		}
+	};
+
+	const retryProcessing = async () => {
+		setRetrying(true);
+		try {
+			await api(`/api/videos/${id}/reprocess`, { method: "POST" });
+			await load({ quiet: true });
+		} catch {
+			// The status line keeps saying it failed, so the button stays.
+		} finally {
+			setRetrying(false);
 		}
 	};
 
@@ -446,6 +459,18 @@ export function Watch() {
 											: "The transcript is being prepared."}
 							</p>
 						)}
+						{current.isOwner &&
+							(current.transcriptStatus === "failed" ||
+								current.aiStatus === "failed") && (
+								<button
+									type="button"
+									className="button small"
+									disabled={retrying}
+									onClick={() => void retryProcessing()}
+								>
+									{retrying ? "Starting…" : "Try again"}
+								</button>
+							)}
 					</div>
 				</aside>
 			</main>

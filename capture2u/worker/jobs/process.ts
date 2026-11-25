@@ -8,6 +8,7 @@ import {
 } from "../lib/transcript";
 
 const MEDIA_FETCH_TOKEN_TTL_SECONDS = 2 * 60 * 60;
+const FALLBACK_TRANSCRIBE_MODEL = "@cf/openai/whisper-large-v3-turbo";
 const WHISPER_MAX_BYTES = 24 * 1024 * 1024;
 const PROMPT_TRANSCRIPT_CHARS = 24_000;
 const MIN_TRANSCRIPT_CHARS_FOR_AI = 40;
@@ -28,8 +29,7 @@ const toBase64 = (bytes: ArrayBuffer) => {
 	return btoa(binary);
 };
 
-async function transcribe(env: Env, video: VideoRow) {
-	const model = env.TRANSCRIBE_MODEL;
+async function transcribeWith(env: Env, video: VideoRow, model: string) {
 	if (!video.object_key) throw new Error("Video has no stored file");
 
 	// Whisper on Workers AI takes the file inline, so it only suits recordings
@@ -63,6 +63,20 @@ async function transcribe(env: Env, video: VideoRow) {
 		timesInMilliseconds: model.startsWith("assemblyai/"),
 		durationSeconds: video.duration_seconds,
 	});
+}
+
+async function transcribe(env: Env, video: VideoRow) {
+	try {
+		return await transcribeWith(env, video, env.TRANSCRIBE_MODEL);
+	} catch (error) {
+		if (env.TRANSCRIBE_MODEL === FALLBACK_TRANSCRIBE_MODEL) throw error;
+		console.error(
+			"[capture2u] speech model failed, trying the built-in one",
+			video.id,
+			error,
+		);
+		return transcribeWith(env, video, FALLBACK_TRANSCRIBE_MODEL);
+	}
 }
 
 const SUMMARY_SCHEMA = {
