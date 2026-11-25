@@ -63,11 +63,11 @@ Already created on the Locate Technologies accounts:
 - Email sending for `capture2u.locate2u.com` (Cloudflare Email Sending). Sign-in codes and notifications come from `no-reply@capture2u.locate2u.com`; set `EMAIL_FROM` to use another address on an onboarded domain.
 - A route sending `capture2u.locate2u.com/*` to the Worker (`routes` in `wrangler.jsonc`). It is a route and not a Workers custom domain because `locate2u.com` is at Cloudflare's limit of 100 custom domains per zone. The app also answers at `https://capture2u.steve-590.workers.dev`.
 
-Still to do by hand:
+The `SUPABASE_SERVICE_ROLE_KEY` secret is set on the Worker. Still to do by hand:
 
-1. **Secret:** in the Worker's Settings > Variables and Secrets, add `SUPABASE_SERVICE_ROLE_KEY` as a secret (Supabase > Project Settings > API keys > secret key). Nothing works without it.
-2. **Address:** in the `locate2u.com` DNS settings add one proxied record so the route has something to answer on: type `AAAA`, name `capture2u`, content `100::`, proxy on. Until then use the workers.dev address.
-3. **Slack (optional):** a Slack admin creates an app from `slack-app-manifest.json` and installs it. Add its signing secret as `SLACK_SIGNING_SECRET` and its bot token as `SLACK_BOT_TOKEN`, then press Retry on the app's Event Subscriptions page.
+1. **Address:** in the `locate2u.com` DNS settings add one proxied record so the route has something to answer on: type `AAAA`, name `capture2u`, content `100::`, proxy on. Until then use the workers.dev address.
+2. **Slack (optional):** a Slack admin creates an app from `slack-app-manifest.json` and installs it. Add its signing secret as `SLACK_SIGNING_SECRET` and its bot token as `SLACK_BOT_TOKEN`, then press Retry on the app's Event Subscriptions page.
+3. **Transcripts for long recordings (optional):** add credit under AI Gateway in the Cloudflare dashboard. Without it, recordings over about 8 minutes get no transcript or summary.
 
 In Supabase, leave the Email sign-in provider on with "Confirm email" on (both are the defaults). No Google client, redirect addresses or email template changes are needed.
 
@@ -84,7 +84,7 @@ Only `SUPABASE_SERVICE_ROLE_KEY` is required. Everything else has a default or i
 | `RETENTION_MODE` | `report` | `report` or `delete`. Nothing is deleted unless this is exactly `delete`. |
 | `RETENTION_DAYS` | `365` | Minimum 30. |
 | `RETENTION_MAX_PER_RUN` | `200` | Most videos deleted in one night. |
-| `TRANSCRIBE_MODEL` | `assemblyai/universal-3.5-pro` | Workers AI speech model. `@cf/openai/whisper-large-v3-turbo` is cheaper but only handles recordings under 24 MB. |
+| `TRANSCRIBE_MODEL` | `assemblyai/universal-3.5-pro` | Workers AI speech model. It is a paid third-party model, so it needs credit under AI Gateway in the Cloudflare dashboard. Without credit (or if it fails) the app falls back to `@cf/openai/whisper-large-v3-turbo`, which only handles recordings under 24 MB (roughly 8 minutes of screen recording). |
 | `SUMMARY_MODEL` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | Workers AI text model for title, summary and chapters. |
 | `PUBLIC_BASE_URL` | the address the request came in on | Only needed to force one address. |
 | `MEDIA_TOKEN_SECRET` | derived from the service key | Optional separate secret for signing playback links and sign-in codes. Changing it expires links and codes already issued. |
