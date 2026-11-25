@@ -2,11 +2,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { Hono } from "hono";
 import type { WatchVideo } from "../../shared/types";
 import { resolveUser } from "../auth";
-import { adminClient, getVideo, type VideoRow } from "../db";
+import { adminClient, getVideo, type VideoRow, videoTrim } from "../db";
 import type { AppBindings, Env, SessionUser } from "../env";
+import { notifyFirstView } from "../lib/notify";
 import { verifyPassword } from "../lib/password";
 import { createToken, sha256Hex, verifyToken } from "../lib/tokens";
-import { expiryDate, isVideoId, positiveInt } from "../lib/util";
+import {
+	expiryDate,
+	isVideoId,
+	positiveInt,
+	trimmedDuration,
+	withinTrim,
+} from "../lib/util";
 
 const PLAY_TOKEN_TTL_SECONDS = 6 * 60 * 60;
 const UNLOCK_TOKEN_TTL_SECONDS = 12 * 60 * 60;
@@ -39,29 +46,62 @@ async function optionalViewer(
 	return result.ok ? result.user : null;
 }
 
-export const watch = new Hono<AppBindings>();
+export type Watchable =
+	| {
+			ok: true;
+			db: SupabaseClient;
+			video: VideoRow;
+			viewer: SessionUser | null;
+			isOwner: boolean;
+	  }
+	| {
+			ok: false;
+			status: 401 | 403 | 404;
+			body: { error: string; reason?: string };
+	  };
 
-watch.get("/:id", async (c) => {
-	const id = c.req.param("id");
-	if (!isVideoId(id)) return c.json({ error: "not_found" }, 404);
-	const db = adminClient(c.env);
+export async function loadWatchable(
+	env: Env,
+	id: string,
+	headers: { authorization?: string; unlockToken?: string },
+): Promise<Watchable> {
+	if (!isVideoId(id))
+		return { ok: false, status: 404, body: { error: "not_found" } };
+	const db = adminClient(env);
 	const video = await getVideo(db, id);
-	if (!video) return c.json({ error: "not_found" }, 404);
+	if (!video) return { ok: false, status: 404, body: { error: "not_found" } };
 
-	const viewer = await optionalViewer(c.env, db, c.req.header("authorization"));
+	const viewer = await optionalViewer(env, db, headers.authorization);
 	const access = checkAccess(video, viewer);
 	if (!access.allowed)
-		return c.json({ error: "restricted", reason: access.reason }, 403);
+		return {
+			ok: false,
+			status: 403,
+			body: { error: "restricted", reason: access.reason },
+		};
 
 	if (video.password_hash && !access.isOwner) {
 		const unlocked = await verifyToken(
-			c.env.MEDIA_TOKEN_SECRET,
+			env.MEDIA_TOKEN_SECRET,
 			"unlock",
 			video.id,
-			c.req.header("x-unlock-token"),
+			headers.unlockToken,
 		);
-		if (!unlocked) return c.json({ error: "password_required" }, 401);
+		if (!unlocked)
+			return { ok: false, status: 401, body: { error: "password_required" } };
 	}
+	return { ok: true, db, video, viewer, isOwner: access.isOwner };
+}
+
+export const watch = new Hono<AppBindings>();
+
+watch.get("/:id", async (c) => {
+	const loaded = await loadWatchable(c.env, c.req.param("id"), {
+		authorization: c.req.header("authorization"),
+		unlockToken: c.req.header("x-unlock-token"),
+	});
+	if (!loaded.ok) return c.json(loaded.body, loaded.status);
+	const { db, video, isOwner } = loaded;
 
 	const { data: owner } = await db
 		.from("profiles")
@@ -79,9 +119,11 @@ watch.get("/:id", async (c) => {
 			)
 		: null;
 	const query = token ? `?t=${encodeURIComponent(token)}` : "";
-	const hasTranscript =
-		video.transcript_status === "ready" &&
-		(video.transcript_segments?.length ?? 0) > 0;
+	const trim = videoTrim(video);
+	const transcript =
+		video.transcript_status === "ready"
+			? withinTrim(video.transcript_segments ?? [], trim)
+			: [];
 
 	const response: WatchVideo = {
 		id: video.id,
@@ -89,9 +131,9 @@ watch.get("/:id", async (c) => {
 		status: video.status,
 		visibility: video.visibility,
 		hasPassword: Boolean(video.password_hash),
-		isOwner: access.isOwner,
-		keep: access.isOwner ? video.keep : null,
-		expiresAt: access.isOwner
+		isOwner,
+		keep: isOwner ? video.keep : null,
+		expiresAt: isOwner
 			? expiryDate(
 					video.created_at,
 					video.keep,
@@ -100,7 +142,11 @@ watch.get("/:id", async (c) => {
 			: null,
 		ownerName: (owner?.full_name as string | null) ?? null,
 		ownerAvatarUrl: (owner?.avatar_url as string | null) ?? null,
-		durationSeconds: video.duration_seconds,
+		durationSeconds: isOwner
+			? video.duration_seconds
+			: trimmedDuration(video.duration_seconds, trim),
+		trimStart: trim.start,
+		trimEnd: trim.end,
 		width: video.width,
 		height: video.height,
 		viewCount: video.view_count,
@@ -108,8 +154,8 @@ watch.get("/:id", async (c) => {
 		transcriptStatus: video.transcript_status,
 		aiStatus: video.ai_status,
 		summary: video.summary,
-		chapters: video.chapters ?? [],
-		transcript: hasTranscript ? (video.transcript_segments ?? []) : [],
+		chapters: withinTrim(video.chapters ?? [], trim),
+		transcript,
 		playback: token
 			? {
 					token,
@@ -117,10 +163,11 @@ watch.get("/:id", async (c) => {
 					posterUrl: video.thumbnail_key
 						? `/media/${video.id}/thumb.jpg${query}`
 						: null,
-					captionsUrl: hasTranscript
-						? `/media/${video.id}/captions.vtt${query}`
-						: null,
-					downloadUrl: access.isOwner
+					captionsUrl:
+						transcript.length > 0
+							? `/media/${video.id}/captions.vtt${query}`
+							: null,
+					downloadUrl: isOwner
 						? `/media/${video.id}/video${query}&download=1`
 						: null,
 				}
@@ -185,5 +232,12 @@ watch.post("/:id/view", async (c) => {
 		p_viewer_id: viewer?.id ?? null,
 	});
 	if (error) throw new Error(`Could not record view: ${error.message}`);
+
+	if (data === true && video.first_view_notified_at === null)
+		c.executionCtx.waitUntil(
+			notifyFirstView(c.env, db, video, viewer).catch((cause) =>
+				console.error("[capture2u] first view email", cause),
+			),
+		);
 	return c.json({ counted: data === true });
 });

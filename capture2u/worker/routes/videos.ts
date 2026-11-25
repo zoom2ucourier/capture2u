@@ -5,13 +5,24 @@ import {
 	adminClient,
 	deleteVideo,
 	getVideo,
+	profileNames,
 	VIDEO_COLUMNS,
 	type VideoRow,
+	videoTrim,
 } from "../db";
 import type { AppBindings, Env } from "../env";
 import { hashPassword } from "../lib/password";
 import { createToken } from "../lib/tokens";
-import { expiryDate, isVideoId, newVideoId, positiveInt } from "../lib/util";
+import {
+	expiryDate,
+	isUuid,
+	isVideoId,
+	newVideoId,
+	normalizeTrim,
+	positiveInt,
+	trimmedDuration,
+} from "../lib/util";
+import { getFolder } from "./folders";
 
 const LIBRARY_TOKEN_TTL_SECONDS = 6 * 60 * 60;
 const VISIBILITIES: Visibility[] = ["public", "company", "private"];
@@ -19,6 +30,8 @@ const VISIBILITIES: Visibility[] = ["public", "company", "private"];
 export async function toLibraryVideo(
 	env: Env,
 	video: VideoRow,
+	viewerId: string,
+	ownerName: string | null = null,
 ): Promise<LibraryVideo> {
 	const retentionDays = positiveInt(env.RETENTION_DAYS, 365);
 	const token = video.thumbnail_key
@@ -36,13 +49,19 @@ export async function toLibraryVideo(
 		visibility: video.visibility,
 		hasPassword: Boolean(video.password_hash),
 		keep: video.keep,
-		durationSeconds: video.duration_seconds,
+		durationSeconds:
+			video.owner_id === viewerId
+				? video.duration_seconds
+				: trimmedDuration(video.duration_seconds, videoTrim(video)),
 		viewCount: video.view_count,
 		createdAt: video.created_at,
 		expiresAt: expiryDate(video.created_at, video.keep, retentionDays),
 		thumbnailUrl: token
 			? `/media/${video.id}/thumb.jpg?t=${encodeURIComponent(token)}`
 			: null,
+		folderId: video.folder_id,
+		isOwner: video.owner_id === viewerId,
+		ownerName,
 	};
 }
 
@@ -79,13 +98,24 @@ videos.get("/", async (c) => {
 	const user = c.get("user");
 	const db = adminClient(c.env);
 	const search = c.req.query("q")?.trim() ?? "";
+	const folderId = c.req.query("folder") ?? "";
 
 	let query = db
 		.from("videos")
 		.select(VIDEO_COLUMNS)
-		.eq("owner_id", user.id)
 		.order("created_at", { ascending: false })
 		.limit(300);
+
+	if (folderId) {
+		if (!isUuid(folderId)) return c.json({ error: "not_found" }, 404);
+		const folder = await getFolder(db, folderId);
+		if (!folder || (folder.owner_id !== user.id && !folder.shared))
+			return c.json({ error: "not_found" }, 404);
+		query = query.eq("folder_id", folder.id);
+		if (folder.owner_id !== user.id) query = query.neq("visibility", "private");
+	} else {
+		query = query.eq("owner_id", user.id);
+	}
 	if (search)
 		query = query.textSearch("search", search, {
 			type: "websearch",
@@ -95,8 +125,16 @@ videos.get("/", async (c) => {
 	const { data, error } = await query;
 	if (error) throw new Error(`Could not list videos: ${error.message}`);
 	const rows = (data ?? []) as unknown as VideoRow[];
+	const names = await profileNames(
+		db,
+		rows.filter((row) => row.owner_id !== user.id).map((row) => row.owner_id),
+	);
 	return c.json({
-		videos: await Promise.all(rows.map((row) => toLibraryVideo(c.env, row))),
+		videos: await Promise.all(
+			rows.map((row) =>
+				toLibraryVideo(c.env, row, user.id, names.get(row.owner_id) ?? null),
+			),
+		),
 	});
 });
 
@@ -154,6 +192,40 @@ videos.patch("/:id", async (c) => {
 				);
 			}
 		}
+		if ("folderId" in body) {
+			if (body.folderId === null) {
+				update.folder_id = null;
+			} else {
+				const folder = isUuid(body.folderId)
+					? await getFolder(db, body.folderId)
+					: null;
+				if (!folder || folder.owner_id !== user.id)
+					return c.json({ error: "invalid_folder" }, 400);
+				update.folder_id = folder.id;
+			}
+		}
+		if ("trim" in body) {
+			const input =
+				body.trim !== null && typeof body.trim === "object"
+					? (body.trim as { start?: unknown; end?: unknown })
+					: {};
+			const trim = normalizeTrim(
+				input.start,
+				input.end,
+				video.duration_seconds,
+			);
+			if (trim === "invalid")
+				return c.json(
+					{
+						error: "invalid_trim",
+						message:
+							"Leave at least one second of video between the start and the end.",
+					},
+					400,
+				);
+			update.trim_start_seconds = trim.start;
+			update.trim_end_seconds = trim.end;
+		}
 	}
 
 	if (Object.keys(update).length === 0)
@@ -167,7 +239,7 @@ videos.patch("/:id", async (c) => {
 		.single();
 	if (error) throw new Error(`Could not update video: ${error.message}`);
 	return c.json({
-		video: await toLibraryVideo(c.env, data as unknown as VideoRow),
+		video: await toLibraryVideo(c.env, data as unknown as VideoRow, user.id),
 	});
 });
 

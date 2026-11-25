@@ -9,6 +9,7 @@ export interface Bindings {
 	VIDEOS: R2Bucket;
 	AI: Ai;
 	JOBS: Queue<JobMessage>;
+	EMAIL?: SendEmail;
 }
 
 export interface Settings {
@@ -23,6 +24,9 @@ export interface Settings {
 	RETENTION_MAX_PER_RUN: string;
 	TRANSCRIBE_MODEL: string;
 	SUMMARY_MODEL: string;
+	EMAIL_FROM: string;
+	SLACK_SIGNING_SECRET: string;
+	SLACK_BOT_TOKEN: string;
 }
 
 export type Env = Bindings & Settings;
@@ -33,6 +37,7 @@ export interface SessionUser {
 	email: string;
 	role: "member" | "admin";
 	fullName: string | null;
+	emailNotifications: boolean;
 }
 
 export type AppBindings = {

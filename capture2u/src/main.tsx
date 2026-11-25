@@ -2,29 +2,19 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
+import { SignInForm } from "./components/SignInForm";
+import { Embed } from "./pages/Embed";
 import { Library } from "./pages/Library";
 import { RecordPage } from "./pages/Record";
 import { Watch } from "./pages/Watch";
 import "./styles.css";
 
-function SignInScreen({ returnTo }: { returnTo?: string }) {
-	const { signIn, error } = useAuth();
+function SignInScreen() {
 	return (
 		<main className="center-screen">
 			<div className="card sign-in">
 				<h1>Capture2u</h1>
-				<p className="muted">
-					Record your screen and share a link. Sign in with your work Google
-					account.
-				</p>
-				{error && <p className="alert">{error}</p>}
-				<button
-					type="button"
-					className="button primary"
-					onClick={() => void signIn(returnTo)}
-				>
-					Sign in with Google
-				</button>
+				<SignInForm intro="Record your screen and share a link. Sign in with your work email." />
 			</div>
 		</main>
 	);
@@ -60,12 +50,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 function Protected({ children }: { children: React.ReactNode }) {
 	const { loading, user } = useAuth();
 	if (loading) return <main className="center-screen muted">Loading…</main>;
-	if (!user)
-		return (
-			<SignInScreen
-				returnTo={window.location.pathname + window.location.search}
-			/>
-		);
+	if (!user) return <SignInScreen />;
 	return <Shell>{children}</Shell>;
 }
 
@@ -89,6 +74,7 @@ function App() {
 				}
 			/>
 			<Route path="/v/:id" element={<Watch />} />
+			<Route path="/embed/:id" element={<Embed />} />
 			<Route path="*" element={<Navigate to="/" replace />} />
 		</Routes>
 	);

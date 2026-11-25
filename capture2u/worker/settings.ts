@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS = {
 	RETENTION_MAX_PER_RUN: "200",
 	TRANSCRIBE_MODEL: "assemblyai/universal-3.5-pro",
 	SUMMARY_MODEL: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+	EMAIL_FROM: "no-reply@capture2u.locate2u.com",
 } as const;
 
 const text = (value: unknown) =>
@@ -39,5 +40,8 @@ export function resolveEnv(raw: RawEnv, origin?: string): Env {
 		TRANSCRIBE_MODEL:
 			text(raw.TRANSCRIBE_MODEL) || DEFAULT_SETTINGS.TRANSCRIBE_MODEL,
 		SUMMARY_MODEL: text(raw.SUMMARY_MODEL) || DEFAULT_SETTINGS.SUMMARY_MODEL,
+		EMAIL_FROM: text(raw.EMAIL_FROM) || DEFAULT_SETTINGS.EMAIL_FROM,
+		SLACK_SIGNING_SECRET: text(raw.SLACK_SIGNING_SECRET),
+		SLACK_BOT_TOKEN: text(raw.SLACK_BOT_TOKEN),
 	};
 }

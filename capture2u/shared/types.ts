@@ -30,6 +30,18 @@ export interface LibraryVideo {
 	createdAt: string;
 	expiresAt: string | null;
 	thumbnailUrl: string | null;
+	folderId: string | null;
+	isOwner: boolean;
+	ownerName: string | null;
+}
+
+export interface Folder {
+	id: string;
+	name: string;
+	shared: boolean;
+	isOwner: boolean;
+	ownerName: string | null;
+	videoCount: number;
 }
 
 export interface WatchVideo {
@@ -44,6 +56,8 @@ export interface WatchVideo {
 	ownerName: string | null;
 	ownerAvatarUrl: string | null;
 	durationSeconds: number | null;
+	trimStart: number | null;
+	trimEnd: number | null;
 	width: number | null;
 	height: number | null;
 	viewCount: number;
@@ -61,6 +75,24 @@ export interface WatchVideo {
 		downloadUrl: string | null;
 	} | null;
 }
+
+export type CommentKind = "text" | "emoji";
+
+export interface VideoComment {
+	id: string;
+	kind: CommentKind;
+	body: string;
+	timestampSeconds: number | null;
+	parentId: string | null;
+	createdAt: string;
+	authorName: string;
+	isMine: boolean;
+	canDelete: boolean;
+}
+
+export const REACTION_EMOJI = ["👍", "❤️", "😂", "🎉", "😮", "👏"] as const;
+
+export const LOGIN_CODE_LENGTH = 6;
 
 export interface PublicConfig {
 	supabaseUrl: string;

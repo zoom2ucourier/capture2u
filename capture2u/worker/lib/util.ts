@@ -72,3 +72,75 @@ export function expiryDate(
 		new Date(createdAt).getTime() + retentionDays * 86_400_000,
 	).toISOString();
 }
+
+export const isUuid = (value: unknown): value is string =>
+	typeof value === "string" &&
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+export interface Trim {
+	start: number | null;
+	end: number | null;
+}
+
+const MIN_TRIMMED_SECONDS = 1;
+
+const trimValue = (value: unknown) => {
+	if (value === null || value === undefined) return null;
+	if (typeof value !== "number" || !Number.isFinite(value) || value < 0)
+		return "invalid" as const;
+	return Math.round(value * 10) / 10;
+};
+
+export function normalizeTrim(
+	startInput: unknown,
+	endInput: unknown,
+	durationSeconds: number | null,
+): Trim | "invalid" {
+	let start = trimValue(startInput);
+	let end = trimValue(endInput);
+	if (start === "invalid" || end === "invalid") return "invalid";
+	if (start === 0) start = null;
+	if (durationSeconds !== null && durationSeconds > 0) {
+		if (start !== null && start >= durationSeconds) return "invalid";
+		if (end !== null && end >= durationSeconds) end = null;
+	}
+	if (end !== null && end - (start ?? 0) < MIN_TRIMMED_SECONDS)
+		return "invalid";
+	if (
+		start !== null &&
+		end === null &&
+		durationSeconds !== null &&
+		durationSeconds - start < MIN_TRIMMED_SECONDS
+	)
+		return "invalid";
+	return { start, end };
+}
+
+export function withinTrim<T extends { start: number; end?: number }>(
+	items: T[],
+	trim: Trim,
+) {
+	if (trim.start === null && trim.end === null) return items;
+	const from = trim.start ?? 0;
+	const to = trim.end ?? Number.POSITIVE_INFINITY;
+	return items.filter(
+		(item) => (item.end ?? item.start) >= from && item.start < to,
+	);
+}
+
+export function trimmedDuration(durationSeconds: number | null, trim: Trim) {
+	if (durationSeconds === null) return null;
+	const end = Math.min(trim.end ?? durationSeconds, durationSeconds);
+	return Math.max(0, end - (trim.start ?? 0));
+}
+
+export const escapeHtml = (value: string) =>
+	value
+		.replace(/&/g, "&amp;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;");
+
+export const embedHtml = (baseUrl: string, id: string, title: string) =>
+	`<iframe src="${escapeHtml(`${baseUrl}/embed/${id}`)}" title="${escapeHtml(title)}" width="640" height="360" frameborder="0" allow="fullscreen; picture-in-picture" allowfullscreen></iframe>`;

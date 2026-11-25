@@ -177,13 +177,16 @@ a {
 .button:focus-visible,
 input:focus-visible,
 select:focus-visible,
+textarea:focus-visible,
+.link-button:focus-visible,
 .timeline button:focus-visible {
 	outline: 2px solid var(--primary);
 	outline-offset: 2px;
 }
 
 input,
-select {
+select,
+textarea {
 	min-height: 40px;
 	padding: 0.45rem 0.6rem;
 	border-radius: 8px;
@@ -487,4 +490,165 @@ progress {
 	color: var(--primary);
 	font-variant-numeric: tabular-nums;
 	font-weight: 600;
+}
+
+.row.centered {
+	justify-content: center;
+}
+
+.code-input {
+	font-size: 1.6rem;
+	font-weight: 700;
+	letter-spacing: 0.4em;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+
+.inline-sign-in {
+	max-width: 380px;
+	text-align: left;
+}
+
+select.small {
+	min-height: 34px;
+	padding: 0.2rem 0.4rem;
+	font-size: 0.9rem;
+}
+
+.folder-bar {
+	margin: 0 0 1rem;
+}
+
+.button.chip {
+	border-radius: 999px;
+	font-weight: 500;
+}
+
+.button.chip.active,
+.button.reaction.active {
+	border-color: var(--primary);
+	color: var(--primary);
+}
+
+.new-folder {
+	margin: 0;
+	flex-wrap: nowrap;
+}
+
+.new-folder input {
+	min-height: 34px;
+	width: 150px;
+}
+
+.folder-settings .row:first-child {
+	margin-top: 0;
+}
+
+.preferences {
+	margin-top: 1.5rem;
+	font-size: 0.9rem;
+}
+
+.comments {
+	margin-top: 1rem;
+}
+
+.reactions {
+	gap: 0.4rem;
+}
+
+.button.reaction {
+	gap: 0.35rem;
+	font-weight: 500;
+}
+
+.comment-form {
+	display: grid;
+	gap: 0.25rem;
+	margin: 0.75rem 0;
+}
+
+textarea {
+	width: 100%;
+	resize: vertical;
+}
+
+.comment-form .row {
+	justify-content: space-between;
+	margin: 0;
+}
+
+.comment-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.comment-list > li {
+	padding: 0.6rem 0;
+	border-top: 1px solid var(--border);
+}
+
+.comment-list.replies > li {
+	border-top: 0;
+	padding: 0.4rem 0 0;
+}
+
+.replies {
+	margin-left: 1.25rem;
+}
+
+.comment p {
+	margin: 0;
+}
+
+.comment-text {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.link-button {
+	border: 0;
+	padding: 0;
+	margin-left: 0.6rem;
+	background: none;
+	color: var(--primary);
+	font: inherit;
+	font-size: 0.85rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.link-button.replies {
+	margin-left: 1.25rem;
+}
+
+.link-button.danger {
+	color: var(--danger);
+}
+
+.embed {
+	position: fixed;
+	inset: 0;
+	background: #000;
+}
+
+.embed video {
+	width: 100%;
+	height: 100%;
+	display: block;
+}
+
+.embed-message {
+	display: grid;
+	place-content: center;
+	justify-items: center;
+	gap: 0.5rem;
+	padding: 1rem;
+	color: #d1d5db;
+	text-align: center;
+}
+
+.embed-message p {
+	margin: 0;
 }

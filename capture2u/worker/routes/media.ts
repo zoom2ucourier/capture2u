@@ -1,9 +1,9 @@
 import { Hono } from "hono";
-import { adminClient, getVideo } from "../db";
+import { adminClient, getVideo, isOpenVideo, videoTrim } from "../db";
 import type { AppBindings } from "../env";
 import { verifyToken } from "../lib/tokens";
 import { segmentsToVtt } from "../lib/transcript";
-import { isVideoId, parseRangeHeader } from "../lib/util";
+import { isVideoId, parseRangeHeader, withinTrim } from "../lib/util";
 
 export const media = new Hono<AppBindings>();
 
@@ -85,7 +85,7 @@ media.get("/:id/thumb.jpg", async (c) => {
 	const video = await getVideo(adminClient(c.env), id);
 	if (!video?.thumbnail_key) return c.json({ error: "not_found" }, 404);
 
-	const isOpen = video.visibility === "public" && !video.password_hash;
+	const isOpen = isOpenVideo(video);
 	if (
 		!isOpen &&
 		!(await hasPlayToken(c.env.MEDIA_TOKEN_SECRET, id, c.req.query("t")))
@@ -110,9 +110,11 @@ media.get("/:id/captions.vtt", async (c) => {
 	)
 		return c.json({ error: "forbidden" }, 403);
 	const video = await getVideo(adminClient(c.env), id);
-	if (!video?.transcript_segments?.length)
-		return c.json({ error: "not_found" }, 404);
-	return new Response(segmentsToVtt(video.transcript_segments), {
+	const segments = video
+		? withinTrim(video.transcript_segments ?? [], videoTrim(video))
+		: [];
+	if (segments.length === 0) return c.json({ error: "not_found" }, 404);
+	return new Response(segmentsToVtt(segments), {
 		headers: {
 			"Content-Type": "text/vtt; charset=utf-8",
 			"Cache-Control": "private, max-age=300",

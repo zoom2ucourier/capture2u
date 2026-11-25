@@ -14,13 +14,16 @@ export interface CurrentUser {
 	email: string;
 	role: "member" | "admin";
 	fullName: string | null;
+	emailNotifications: boolean;
 }
 
 interface AuthState {
 	loading: boolean;
 	user: CurrentUser | null;
 	error: string | null;
-	signIn: (returnTo?: string) => Promise<void>;
+	requestCode: (email: string) => Promise<void>;
+	verifyCode: (email: string, code: string) => Promise<void>;
+	setEmailNotifications: (enabled: boolean) => Promise<void>;
 	signOut: () => Promise<void>;
 }
 
@@ -47,9 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 				cause instanceof ApiRequestError &&
 				cause.code === "domain_not_allowed"
 			) {
-				setError(
-					"Capture2u is only for company email addresses. Sign in with your work Google account.",
-				);
+				setError("Capture2u is only for company email addresses.");
 				const supabase = await getSupabase();
 				await supabase.auth.signOut();
 			} else if (!(cause instanceof ApiRequestError && cause.status === 401)) {
@@ -89,14 +90,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		};
 	}, [loadUser]);
 
-	const signIn = useCallback(async (returnTo?: string) => {
-		const supabase = await getSupabase();
-		const target = new URL(returnTo ?? "/", window.location.origin);
-		const { error: signInError } = await supabase.auth.signInWithOAuth({
-			provider: "google",
-			options: { redirectTo: target.toString() },
+	const requestCode = useCallback(async (email: string) => {
+		await api("/api/auth/code", { auth: "none", body: { email } });
+	}, []);
+
+	const verifyCode = useCallback(async (email: string, code: string) => {
+		const result = await api<{ tokenHash: string }>("/api/auth/verify", {
+			auth: "none",
+			body: { email, code },
 		});
-		if (signInError) setError(signInError.message);
+		const supabase = await getSupabase();
+		const { error: sessionError } = await supabase.auth.verifyOtp({
+			token_hash: result.tokenHash,
+			type: "email",
+		});
+		if (sessionError) throw new Error("Could not sign you in. Try again.");
+	}, []);
+
+	const setEmailNotifications = useCallback(async (enabled: boolean) => {
+		const result = await api<{ user: CurrentUser }>("/api/me", {
+			method: "PATCH",
+			body: { emailNotifications: enabled },
+		});
+		setUser(result.user);
 	}, []);
 
 	const signOut = useCallback(async () => {
@@ -106,8 +122,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	}, []);
 
 	const value = useMemo(
-		() => ({ loading, user, error, signIn, signOut }),
-		[loading, user, error, signIn, signOut],
+		() => ({
+			loading,
+			user,
+			error,
+			requestCode,
+			verifyCode,
+			setEmailNotifications,
+			signOut,
+		}),
+		[
+			loading,
+			user,
+			error,
+			requestCode,
+			verifyCode,
+			setEmailNotifications,
+			signOut,
+		],
 	);
 	return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

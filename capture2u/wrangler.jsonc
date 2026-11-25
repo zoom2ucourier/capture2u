@@ -11,12 +11,15 @@
 	},
 	"r2_buckets": [{ "binding": "VIDEOS", "bucket_name": "capture2u-videos" }],
 	"ai": { "binding": "AI" },
+	"send_email": [{ "name": "EMAIL" }],
 	"queues": {
 		"producers": [{ "binding": "JOBS", "queue": "capture2u-jobs" }],
 		"consumers": [
 			{ "queue": "capture2u-jobs", "max_batch_size": 1, "max_retries": 3 }
 		]
 	},
+	"workers_dev": true,
+	"routes": [{ "pattern": "capture2u.locate2u.com", "custom_domain": true }],
 	"triggers": { "crons": ["0 16 * * *"] },
 	"observability": { "enabled": true },
 	// Variables and secrets added in the Cloudflare dashboard are kept on every

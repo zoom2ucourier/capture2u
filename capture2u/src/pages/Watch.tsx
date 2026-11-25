@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { Visibility, WatchVideo } from "../../shared/types";
 import { useAuth } from "../auth";
+import { Comments } from "../components/Comments";
+import { Player, type PlayerHandle } from "../components/Player";
+import { SignInForm } from "../components/SignInForm";
 import { ApiRequestError, api, formatDate, formatDuration } from "../lib/api";
 
 type LoadState =
@@ -23,17 +26,37 @@ const isSettled = (video: WatchVideo) =>
 	video.aiStatus !== "pending" &&
 	video.aiStatus !== "processing";
 
+const visibleDuration = (video: WatchVideo) => {
+	if (!video.isOwner || video.durationSeconds === null)
+		return video.durationSeconds;
+	return Math.max(
+		0,
+		Math.min(video.trimEnd ?? video.durationSeconds, video.durationSeconds) -
+			(video.trimStart ?? 0),
+	);
+};
+
+const embedCode = (id: string, title: string) =>
+	`<iframe src="${window.location.origin}/embed/${id}" title="${title
+		.replace(/&/g, "&amp;")
+		.replace(
+			/"/g,
+			"&quot;",
+		)}" width="640" height="360" frameborder="0" allow="fullscreen; picture-in-picture" allowfullscreen></iframe>`;
+
 export function Watch() {
 	const { id = "" } = useParams();
 	const navigate = useNavigate();
-	const { user, loading: authLoading, signIn } = useAuth();
+	const { user, loading: authLoading } = useAuth();
 	const signedIn = user !== null;
 	const [state, setState] = useState<LoadState>({ kind: "loading" });
 	const [password, setPassword] = useState("");
 	const [speed, setSpeed] = useState(1);
-	const [copied, setCopied] = useState(false);
+	const [copied, setCopied] = useState<"link" | "embed" | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
-	const videoRef = useRef<HTMLVideoElement | null>(null);
+	const [editingTrim, setEditingTrim] = useState(false);
+	const [commentSignIn, setCommentSignIn] = useState(false);
+	const playerRef = useRef<PlayerHandle | null>(null);
 	const viewSentRef = useRef(false);
 	const playbackRef = useRef<WatchVideo["playback"]>(null);
 
@@ -85,10 +108,6 @@ export function Watch() {
 		return () => window.clearInterval(interval);
 	}, [load, settled]);
 
-	useEffect(() => {
-		if (videoRef.current) videoRef.current.playbackRate = speed;
-	}, [speed]);
-
 	const unlock = async (event: React.FormEvent) => {
 		event.preventDefault();
 		try {
@@ -113,19 +132,17 @@ export function Watch() {
 		}).catch(() => undefined);
 	};
 
-	const seek = (seconds: number) => {
-		const element = videoRef.current;
-		if (!element) return;
-		element.currentTime = seconds;
-		void element.play().catch(() => undefined);
-	};
+	const seek = (seconds: number) => playerRef.current?.seek(seconds);
+	const currentTime = () => playerRef.current?.currentTime() ?? 0;
 
 	const patch = async (body: Record<string, unknown>, done?: string) => {
+		let saved = true;
 		try {
 			await api(`/api/videos/${id}`, { method: "PATCH", body });
 			await load({ quiet: true });
 			setNotice(done ?? "Saved");
 		} catch (cause) {
+			saved = false;
 			setNotice(
 				cause instanceof ApiRequestError && cause.message
 					? cause.message
@@ -133,12 +150,13 @@ export function Watch() {
 			);
 		}
 		window.setTimeout(() => setNotice(null), 2500);
+		return saved;
 	};
 
-	const copyLink = async () => {
-		await navigator.clipboard.writeText(`${window.location.origin}/v/${id}`);
-		setCopied(true);
-		window.setTimeout(() => setCopied(false), 2000);
+	const copy = async (kind: "link" | "embed", text: string) => {
+		await navigator.clipboard.writeText(text);
+		setCopied(kind);
+		window.setTimeout(() => setCopied(null), 2000);
 	};
 
 	const remove = async () => {
@@ -171,16 +189,7 @@ export function Watch() {
 						</form>
 					)}
 					{state.kind === "sign-in" && (
-						<>
-							<p>Sign in with your work account to watch this video.</p>
-							<button
-								type="button"
-								className="button primary"
-								onClick={() => void signIn(`/v/${id}`)}
-							>
-								Sign in with Google
-							</button>
-						</>
+						<SignInForm intro="Sign in with your work email to watch this video." />
 					)}
 					{state.kind === "private" && (
 						<p>This video is private to its owner.</p>
@@ -206,9 +215,11 @@ export function Watch() {
 					<button
 						type="button"
 						className="button small"
-						onClick={() => void copyLink()}
+						onClick={() =>
+							void copy("link", `${window.location.origin}/v/${id}`)
+						}
 					>
-						{copied ? "Copied" : "Copy link"}
+						{copied === "link" ? "Copied" : "Copy link"}
 					</button>
 				</nav>
 			</header>
@@ -217,22 +228,14 @@ export function Watch() {
 				<section>
 					<div className="player">
 						{current.playback ? (
-							<video
-								ref={videoRef}
-								src={current.playback.videoUrl}
-								poster={current.playback.posterUrl ?? undefined}
-								controls
-								playsInline
-								preload="metadata"
-								onPlay={recordView}
-							>
-								<track
-									kind="captions"
-									srcLang="en"
-									label="Captions"
-									src={current.playback.captionsUrl ?? undefined}
-								/>
-							</video>
+							<Player
+								ref={playerRef}
+								playback={current.playback}
+								trimStart={editingTrim ? null : current.trimStart}
+								trimEnd={editingTrim ? null : current.trimEnd}
+								speed={speed}
+								onFirstPlay={recordView}
+							/>
 						) : (
 							<div className="player-placeholder">
 								{current.status === "uploading"
@@ -250,7 +253,7 @@ export function Watch() {
 					/>
 					<p className="muted small-text">
 						{current.ownerName ?? "Unknown"} · {formatDate(current.createdAt)} ·{" "}
-						{formatDuration(current.durationSeconds)} · {current.viewCount}{" "}
+						{formatDuration(visibleDuration(current))} · {current.viewCount}{" "}
 						{current.viewCount === 1 ? "view" : "views"}
 					</p>
 
@@ -277,6 +280,15 @@ export function Watch() {
 									Download
 								</a>
 							)}
+							<button
+								type="button"
+								className="button ghost small"
+								onClick={() =>
+									void copy("embed", embedCode(current.id, current.title))
+								}
+							>
+								{copied === "embed" ? "Embed code copied" : "Copy embed code"}
+							</button>
 						</div>
 					)}
 
@@ -307,6 +319,24 @@ export function Watch() {
 									)
 								}
 							/>
+							{current.playback && (
+								<TrimControl
+									key={`${current.trimStart}-${current.trimEnd}`}
+									video={current}
+									editing={editingTrim}
+									getCurrentTime={currentTime}
+									onEditingChange={setEditingTrim}
+									onSave={async (trim) => {
+										const saved = await patch(
+											{ trim },
+											trim.start === null && trim.end === null
+												? "Trim removed"
+												: "Trim saved",
+										);
+										if (saved) setEditingTrim(false);
+									}}
+								/>
+							)}
 							<label className="choice">
 								<input
 									type="checkbox"
@@ -331,6 +361,37 @@ export function Watch() {
 								Delete video
 							</button>
 							{notice && <p className="muted small-text">{notice}</p>}
+						</div>
+					)}
+
+					{signedIn ? (
+						<Comments
+							videoId={current.id}
+							unlockToken={sessionStorage.getItem(unlockKey(id))}
+							getCurrentTime={currentTime}
+							onSeek={seek}
+						/>
+					) : (
+						<div className="card comments">
+							<h2>Comments</h2>
+							{commentSignIn ? (
+								<div className="sign-in inline-sign-in">
+									<SignInForm intro="Sign in with your work email to comment." />
+								</div>
+							) : (
+								<div className="row">
+									<span className="muted">
+										Comments are for signed-in staff.
+									</span>
+									<button
+										type="button"
+										className="button small"
+										onClick={() => setCommentSignIn(true)}
+									>
+										Sign in
+									</button>
+								</div>
+							)}
 						</div>
 					)}
 				</section>
@@ -380,7 +441,9 @@ export function Watch() {
 									? "No speech was found in this recording."
 									: current.transcriptStatus === "failed"
 										? "The transcript could not be created."
-										: "The transcript is being prepared."}
+										: current.transcriptStatus === "ready"
+											? "There is no speech in the part of the video that is shown."
+											: "The transcript is being prepared."}
 							</p>
 						)}
 					</div>
@@ -418,6 +481,104 @@ function TitleEditor({
 				if (event.key === "Enter") event.currentTarget.blur();
 			}}
 		/>
+	);
+}
+
+function TrimControl({
+	video,
+	editing,
+	getCurrentTime,
+	onEditingChange,
+	onSave,
+}: {
+	video: WatchVideo;
+	editing: boolean;
+	getCurrentTime: () => number;
+	onEditingChange: (editing: boolean) => void;
+	onSave: (trim: { start: number | null; end: number | null }) => void;
+}) {
+	const [start, setStart] = useState(video.trimStart);
+	const [end, setEnd] = useState(video.trimEnd);
+	const trimmed = video.trimStart !== null || video.trimEnd !== null;
+	const mark = () => Math.round(getCurrentTime() * 10) / 10;
+
+	if (!editing)
+		return (
+			<div className="field">
+				Trim
+				<p className="muted small-text">
+					{trimmed
+						? `Viewers see ${formatDuration(video.trimStart ?? 0)} to ${formatDuration(video.trimEnd ?? video.durationSeconds)}. The rest is hidden, not deleted.`
+						: "Hide the start or the end of this video from viewers."}
+				</p>
+				<div className="row">
+					<button
+						type="button"
+						className="button small"
+						onClick={() => {
+							setStart(video.trimStart);
+							setEnd(video.trimEnd);
+							onEditingChange(true);
+						}}
+					>
+						{trimmed ? "Change trim" : "Trim"}
+					</button>
+					{trimmed && (
+						<button
+							type="button"
+							className="button ghost small"
+							onClick={() => onSave({ start: null, end: null })}
+						>
+							Remove trim
+						</button>
+					)}
+				</div>
+			</div>
+		);
+
+	return (
+		<div className="field">
+			Trim
+			<p className="muted small-text">
+				Play or drag the video to the moment you want, then press a button.
+			</p>
+			<div className="row">
+				<button
+					type="button"
+					className="button small"
+					onClick={() => setStart(mark())}
+				>
+					Start here
+				</button>
+				<button
+					type="button"
+					className="button small"
+					onClick={() => setEnd(mark())}
+				>
+					End here
+				</button>
+			</div>
+			<p className="small-text">
+				Starts at {formatDuration(start ?? 0)} · Ends at{" "}
+				{formatDuration(end ?? video.durationSeconds)}
+			</p>
+			<div className="row">
+				<button
+					type="button"
+					className="button primary small"
+					onClick={() => onSave({ start, end })}
+				>
+					Save trim
+				</button>
+				<button
+					type="button"
+					className="button ghost small"
+					onClick={() => onEditingChange(false)}
+				>
+					Cancel
+				</button>
+			</div>
+		</div>
 	);
 }
 

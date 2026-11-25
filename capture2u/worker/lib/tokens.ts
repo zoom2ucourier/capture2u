@@ -27,7 +27,7 @@ const sign = async (secret: string, payload: string) =>
 		),
 	);
 
-const constantTimeEqual = (left: string, right: string) => {
+export const constantTimeEqual = (left: string, right: string) => {
 	if (left.length !== right.length) return false;
 	let diff = 0;
 	for (let i = 0; i < left.length; i += 1)
@@ -70,9 +70,21 @@ export async function verifyToken(
 	return constantTimeEqual(expected, token.slice(separator + 1));
 }
 
-export async function sha256Hex(value: string) {
-	const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
-	return Array.from(new Uint8Array(digest), (byte) =>
+const toHex = (bytes: ArrayBuffer) =>
+	Array.from(new Uint8Array(bytes), (byte) =>
 		byte.toString(16).padStart(2, "0"),
 	).join("");
+
+export async function sha256Hex(value: string) {
+	return toHex(await crypto.subtle.digest("SHA-256", encoder.encode(value)));
+}
+
+export async function hmacSha256Hex(secret: string, payload: string) {
+	return toHex(
+		await crypto.subtle.sign(
+			"HMAC",
+			await importKey(secret),
+			encoder.encode(payload),
+		),
+	);
 }

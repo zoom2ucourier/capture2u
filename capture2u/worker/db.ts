@@ -33,12 +33,16 @@ export interface VideoRow {
 	chapters: Chapter[] | null;
 	ai_status: StageStatus;
 	view_count: number;
+	folder_id: string | null;
+	trim_start_seconds: number | null;
+	trim_end_seconds: number | null;
+	first_view_notified_at: string | null;
 	created_at: string;
 	updated_at: string;
 }
 
 export const VIDEO_COLUMNS =
-	"id,owner_id,title,title_edited,status,visibility,password_hash,keep,duration_seconds,width,height,size_bytes,mime_type,object_key,thumbnail_key,upload_id,transcript_status,transcript_text,transcript_segments,summary,chapters,ai_status,view_count,created_at,updated_at";
+	"id,owner_id,title,title_edited,status,visibility,password_hash,keep,duration_seconds,width,height,size_bytes,mime_type,object_key,thumbnail_key,upload_id,transcript_status,transcript_text,transcript_segments,summary,chapters,ai_status,view_count,folder_id,trim_start_seconds,trim_end_seconds,first_view_notified_at,created_at,updated_at";
 
 export const adminClient = (env: Env): SupabaseClient => {
 	if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY)
@@ -89,4 +93,32 @@ export async function deleteVideo(
 	await deleteVideoObjects(env, video);
 	const { error } = await db.from("videos").delete().eq("id", video.id);
 	if (error) throw new Error(`Could not delete video: ${error.message}`);
+}
+
+export const videoTrim = (video: VideoRow) => ({
+	start: video.trim_start_seconds,
+	end: video.trim_end_seconds,
+});
+
+export const isOpenVideo = (
+	video: Pick<VideoRow, "visibility" | "password_hash">,
+) => video.visibility === "public" && !video.password_hash;
+
+export async function profileNames(db: SupabaseClient, ids: string[]) {
+	const names = new Map<string, string>();
+	const unique = [...new Set(ids)];
+	if (unique.length === 0) return names;
+	const { data, error } = await db
+		.from("profiles")
+		.select("id,full_name,email")
+		.in("id", unique);
+	if (error) throw new Error(`Could not load profiles: ${error.message}`);
+	for (const row of data ?? [])
+		names.set(
+			row.id as string,
+			(row.full_name as string | null) ||
+				(row.email as string).split("@")[0] ||
+				"Someone",
+		);
+	return names;
 }
