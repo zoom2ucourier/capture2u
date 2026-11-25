@@ -9,7 +9,7 @@
 			"display_name": "Capture2u",
 			"always_online": false
 		},
-		"unfurl_domains": ["capture2u.locate2u.com"]
+		"unfurl_domains": ["capture.locate2u.io"]
 	},
 	"oauth_config": {
 		"scopes": {
@@ -18,7 +18,7 @@
 	},
 	"settings": {
 		"event_subscriptions": {
-			"request_url": "https://capture2u.locate2u.com/api/slack/events",
+			"request_url": "https://capture.locate2u.io/api/slack/events",
 			"bot_events": ["link_shared"]
 		},
 		"org_deploy_enabled": false,

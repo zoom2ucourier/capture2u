@@ -19,9 +19,7 @@
 		]
 	},
 	"workers_dev": true,
-	"routes": [
-		{ "pattern": "capture2u.locate2u.com/*", "zone_name": "locate2u.com" }
-	],
+	"routes": [{ "pattern": "capture.locate2u.io", "custom_domain": true }],
 	"triggers": { "crons": ["0 16 * * *"] },
 	"observability": { "enabled": true },
 	// Variables and secrets added in the Cloudflare dashboard are kept on every
