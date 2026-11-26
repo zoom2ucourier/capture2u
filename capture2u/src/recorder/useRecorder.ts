@@ -14,6 +14,12 @@ import { isUserCancellationError } from "@cap/recorder-core/recorder-utils";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, getAccessToken } from "../lib/api";
 import {
+	type BubblePositionRef,
+	type CameraCompositor,
+	canCompositeCamera,
+	createCameraCompositor,
+} from "./cameraCompositor";
+import {
 	captureThumbnail,
 	pickRecordingFormat,
 	type RecordingFormat,
@@ -34,6 +40,15 @@ export interface RecorderOptions {
 	mode: DetectedDisplayRecordingMode;
 	microphoneId: string | null;
 	systemAudio: boolean;
+	camera: { stream: MediaStream; position: BubblePositionRef } | null;
+}
+
+export interface RecorderPreview {
+	stream: MediaStream;
+	width: number;
+	height: number;
+	cameraInVideo: boolean;
+	entireScreen: boolean;
 }
 
 export interface FinishedRecording {
@@ -56,11 +71,13 @@ export function useRecorder() {
 	const [error, setError] = useState<string | null>(null);
 	const [share, setShare] = useState<{ id: string; url: string } | null>(null);
 	const [finished, setFinished] = useState<FinishedRecording | null>(null);
+	const [preview, setPreview] = useState<RecorderPreview | null>(null);
 
 	const recorderRef = useRef<MediaRecorder | null>(null);
 	const recordingStreamRef = useRef<MediaStream | null>(null);
 	const streamsRef = useRef<MediaStream[]>([]);
 	const mixerRef = useRef<AudioMixer | null>(null);
+	const compositorRef = useRef<CameraCompositor | null>(null);
 	const formatRef = useRef<RecordingFormat | null>(null);
 	const dimensionsRef = useRef<{ width?: number; height?: number }>({});
 	const timerRef = useRef<{
@@ -99,6 +116,9 @@ export function useRecorder() {
 			for (const track of stream.getTracks()) track.stop();
 		streamsRef.current = [];
 		recordingStreamRef.current = null;
+		compositorRef.current?.stop();
+		compositorRef.current = null;
+		setPreview(null);
 		const mixer = mixerRef.current;
 		mixerRef.current = null;
 		if (mixer) await mixer.close();
@@ -318,6 +338,34 @@ export function useRecorder() {
 					height: settings.height,
 				};
 
+				const cameraTrack = options.camera?.stream.getVideoTracks()[0];
+				let cameraInVideo = false;
+				if (
+					options.camera &&
+					cameraTrack?.readyState === "live" &&
+					canCompositeCamera()
+				) {
+					try {
+						const compositor = createCameraCompositor({
+							screenTrack: videoTrack,
+							cameraTrack,
+							position: options.camera.position,
+						});
+						compositorRef.current = compositor;
+						tracks[0] = compositor.track;
+						cameraInVideo = true;
+					} catch {
+						setNotice("The camera could not be added to this recording.");
+					}
+				}
+				setPreview({
+					stream: new MediaStream([videoTrack]),
+					width: settings.width ?? 16,
+					height: settings.height ?? 9,
+					cameraInVideo,
+					entireScreen: settings.displaySurface === "monitor",
+				});
+
 				recordingStreamRef.current = new MediaStream(tracks);
 				videoTrack.addEventListener("ended", stop, { once: true });
 				beginRecorder();
@@ -402,6 +450,7 @@ export function useRecorder() {
 		error,
 		share,
 		finished,
+		preview,
 		start,
 		stop,
 		pause,

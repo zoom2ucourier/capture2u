@@ -1,11 +1,32 @@
-import { type RefObject, useEffect, useRef, useState } from "react";
+import {
+	type CSSProperties,
+	type PointerEvent,
+	type RefObject,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { formatDuration } from "../lib/api";
-import type { useRecorder } from "../recorder/useRecorder";
+import {
+	BUBBLE_HEIGHT_FRACTION,
+	type BubblePosition,
+	type BubblePositionRef,
+	clampBubblePosition,
+} from "../recorder/cameraCompositor";
+import type { RecorderPreview, useRecorder } from "../recorder/useRecorder";
 import { Button } from "./common/Button";
 import { Icons } from "./common/Icons";
 
 type Recorder = ReturnType<typeof useRecorder>;
 type Confirming = "restart" | "delete" | null;
+
+const KEYBOARD_STEP = 0.03;
+const KEYBOARD_MOVES: Record<string, BubblePosition> = {
+	ArrowLeft: { x: -KEYBOARD_STEP, y: 0 },
+	ArrowRight: { x: KEYBOARD_STEP, y: 0 },
+	ArrowUp: { x: 0, y: -KEYBOARD_STEP },
+	ArrowDown: { x: 0, y: KEYBOARD_STEP },
+};
 
 export function StreamVideo({
 	stream,
@@ -130,12 +151,104 @@ export function RecordingControls({ recorder }: { recorder: Recorder }) {
 	);
 }
 
+function CameraStage({
+	preview,
+	cameraStream,
+	cameraPosition,
+}: {
+	preview: RecorderPreview;
+	cameraStream: MediaStream;
+	cameraPosition: BubblePositionRef;
+}) {
+	const stageRef = useRef<HTMLDivElement | null>(null);
+	const [position, setPosition] = useState(() =>
+		clampBubblePosition(cameraPosition.current, preview.width, preview.height),
+	);
+
+	const move = (next: BubblePosition) => {
+		const clamped = clampBubblePosition(next, preview.width, preview.height);
+		cameraPosition.current = clamped;
+		setPosition(clamped);
+	};
+
+	const dragTo = (event: PointerEvent<HTMLButtonElement>) => {
+		const bounds = stageRef.current?.getBoundingClientRect();
+		if (!bounds || bounds.width === 0 || bounds.height === 0) return;
+		move({
+			x: (event.clientX - bounds.left) / bounds.width,
+			y: (event.clientY - bounds.top) / bounds.height,
+		});
+	};
+
+	return (
+		<div className="floating__stage-area">
+			<div
+				ref={stageRef}
+				className="floating__stage"
+				style={
+					{
+						"--stage-ratio": preview.width / preview.height,
+					} as CSSProperties
+				}
+			>
+				{preview.entireScreen ? (
+					<div className="floating__screen floating__screen--placeholder">
+						Your screen
+					</div>
+				) : (
+					<StreamVideo stream={preview.stream} className="floating__screen" />
+				)}
+				<button
+					type="button"
+					className="floating__bubble"
+					aria-label="Camera position. Drag to move it, or use the arrow keys."
+					title="Drag to move your camera in the video"
+					style={{
+						left: `${position.x * 100}%`,
+						top: `${position.y * 100}%`,
+						height: `${BUBBLE_HEIGHT_FRACTION * 100}%`,
+					}}
+					onPointerDown={(event) => {
+						event.currentTarget.setPointerCapture(event.pointerId);
+						dragTo(event);
+					}}
+					onPointerMove={(event) => {
+						if (event.currentTarget.hasPointerCapture(event.pointerId))
+							dragTo(event);
+					}}
+					onPointerUp={(event) =>
+						event.currentTarget.releasePointerCapture(event.pointerId)
+					}
+					onKeyDown={(event) => {
+						const delta = KEYBOARD_MOVES[event.key];
+						if (!delta) return;
+						event.preventDefault();
+						const from = clampBubblePosition(
+							cameraPosition.current,
+							preview.width,
+							preview.height,
+						);
+						move({ x: from.x + delta.x, y: from.y + delta.y });
+					}}
+				>
+					<StreamVideo
+						stream={cameraStream}
+						className="floating__bubble-video"
+					/>
+				</button>
+			</div>
+		</div>
+	);
+}
+
 export function FloatingControls({
 	recorder,
 	cameraStream,
+	cameraPosition,
 }: {
 	recorder: Recorder;
 	cameraStream: MediaStream | null;
+	cameraPosition: BubblePositionRef;
 }) {
 	const { confirming, setConfirming, confirm } = useConfirming(recorder);
 	const recording = recorder.phase === "recording";
@@ -143,8 +256,20 @@ export function FloatingControls({
 
 	return (
 		<div className="floating">
-			{cameraStream && (
-				<StreamVideo stream={cameraStream} className="floating__camera" />
+			{cameraStream && recorder.preview?.cameraInVideo && (
+				<CameraStage
+					preview={recorder.preview}
+					cameraStream={cameraStream}
+					cameraPosition={cameraPosition}
+				/>
+			)}
+			{cameraStream && !recorder.preview?.cameraInVideo && (
+				<div className="floating__selfie">
+					<StreamVideo
+						stream={cameraStream}
+						className="floating__selfie-video"
+					/>
+				</div>
 			)}
 			<div className="floating__bar">
 				{!live && (

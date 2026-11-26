@@ -13,6 +13,10 @@ import {
 	StreamVideo,
 } from "../components/RecordingControls";
 import { formatDuration } from "../lib/api";
+import {
+	type BubblePosition,
+	DEFAULT_BUBBLE_POSITION,
+} from "../recorder/cameraCompositor";
 import { useFloatingWindow } from "../recorder/useFloatingWindow";
 import { useRecorder } from "../recorder/useRecorder";
 
@@ -28,8 +32,8 @@ const MODES: {
 
 const NO_MICROPHONE = "__none__";
 const FLOATING_BAR_HEIGHT = 68;
-const FLOATING_WIDTH = 380;
-const FLOATING_CAMERA_HEIGHT = 285;
+const FLOATING_WIDTH = 440;
+const FLOATING_CAMERA_HEIGHT = 248;
 
 export function RecordPage() {
 	const recorder = useRecorder();
@@ -45,6 +49,7 @@ export function RecordPage() {
 	const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
 	const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
 	const cameraStreamRef = useRef<MediaStream | null>(null);
+	const cameraPositionRef = useRef<BubblePosition>(DEFAULT_BUBBLE_POSITION);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -155,6 +160,9 @@ export function RecordPage() {
 			mode,
 			microphoneId: microphoneId === NO_MICROPHONE ? null : microphoneId,
 			systemAudio,
+			camera: cameraStream
+				? { stream: cameraStream, position: cameraPositionRef }
+				: null,
 		});
 		showFloating();
 	};
@@ -254,9 +262,8 @@ export function RecordPage() {
 							/>
 							{floating.supported ? (
 								<p className="field__hint">
-									Your camera floats above your other windows with the recording
-									controls. It appears in the video when you record your entire
-									screen.
+									Your camera appears as a circle in the video. While you
+									record, drag the circle in the floating window to move it.
 								</p>
 							) : (
 								<div>
@@ -333,6 +340,14 @@ export function RecordPage() {
 						<p className="record__notice">{recorder.notice}</p>
 					)}
 					<RecordingControls recorder={recorder} />
+					{cameraStream &&
+						recorder.preview &&
+						!recorder.preview.cameraInVideo && (
+							<p className="field__hint">
+								This browser cannot place your camera in the video. Keep the
+								floating camera window on the screen you are recording.
+							</p>
+						)}
 					{floating.supported && !floating.floatingWindow ? (
 						<Button
 							variant="ghost"
@@ -355,7 +370,11 @@ export function RecordPage() {
 			{floating.floatingWindow &&
 				wantsFloating &&
 				createPortal(
-					<FloatingControls recorder={recorder} cameraStream={cameraStream} />,
+					<FloatingControls
+						recorder={recorder}
+						cameraStream={cameraStream}
+						cameraPosition={cameraPositionRef}
+					/>,
 					floating.floatingWindow.document.body,
 				)}
 

@@ -28,7 +28,6 @@ type LoadState =
 	| { kind: "error" };
 
 const unlockKey = (id: string) => `capture2u-unlock-${id}`;
-const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
 
 const isSettled = (video: WatchVideo) =>
 	video.status !== "uploading" &&
@@ -62,7 +61,6 @@ export function Watch() {
 	const signedIn = user !== null;
 	const [state, setState] = useState<LoadState>({ kind: "loading" });
 	const [password, setPassword] = useState("");
-	const [speed, setSpeed] = useState(1);
 	const [copied, setCopied] = useState<"link" | "embed" | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 	const [editingTrim, setEditingTrim] = useState(false);
@@ -270,7 +268,7 @@ export function Watch() {
 								playback={current.playback}
 								trimStart={editingTrim ? null : current.trimStart}
 								trimEnd={editingTrim ? null : current.trimEnd}
-								speed={speed}
+								durationSeconds={current.durationSeconds}
 								onFirstPlay={recordView}
 							/>
 						) : (
@@ -320,20 +318,6 @@ export function Watch() {
 
 					{current.playback && (
 						<div className="watch__toolbar">
-							<label className="watch__speed">
-								Speed
-								<select
-									className="form-select form-select--sm"
-									value={speed}
-									onChange={(event) => setSpeed(Number(event.target.value))}
-								>
-									{SPEEDS.map((value) => (
-										<option key={value} value={value}>
-											{value}x
-										</option>
-									))}
-								</select>
-							</label>
 							{current.playback.downloadUrl && (
 								<ButtonAnchor
 									size="sm"

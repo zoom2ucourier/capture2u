@@ -47,6 +47,7 @@ export function Embed() {
 					playback={playback}
 					trimStart={state.video.trimStart}
 					trimEnd={state.video.trimEnd}
+					durationSeconds={state.video.durationSeconds}
 					onFirstPlay={() => {
 						if (viewSentRef.current) return;
 						viewSentRef.current = true;

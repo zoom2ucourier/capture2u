@@ -65,6 +65,12 @@ export const Icons = {
 			<path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
 		</>,
 	),
+	Captions: icon(
+		<>
+			<rect x="3" y="5" width="18" height="14" rx="2" />
+			<path d="M7 15h4M15 15h2M7 11h2M13 11h4" />
+		</>,
+	),
 	Camera: icon(
 		<>
 			<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
@@ -168,6 +174,12 @@ export const Icons = {
 			<path d="M3 9h18" />
 		</>,
 	),
+	Maximize: icon(
+		<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />,
+	),
+	Minimize: icon(
+		<path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />,
+	),
 	Pause: icon(
 		<>
 			<rect x="6" y="4" width="4" height="16" />
@@ -191,6 +203,18 @@ export const Icons = {
 		<>
 			<circle cx="12" cy="12" r="10" />
 			<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />
+		</>,
+	),
+	RotateCcw: icon(
+		<>
+			<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+			<path d="M3 3v5h5" />
+		</>,
+	),
+	RotateCw: icon(
+		<>
+			<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+			<path d="M21 3v5h-5" />
 		</>,
 	),
 	Refresh: icon(
@@ -245,6 +269,13 @@ export const Icons = {
 		<>
 			<polygon points="23 7 16 12 23 17 23 7" />
 			<rect x="1" y="5" width="15" height="14" rx="2" />
+		</>,
+	),
+	VolumeX: icon(
+		<>
+			<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+			<line x1="23" y1="9" x2="17" y2="15" />
+			<line x1="17" y1="9" x2="23" y2="15" />
 		</>,
 	),
 	Volume: icon(
