@@ -1,6 +1,7 @@
 import type { DetectedDisplayRecordingMode } from "@cap/recorder-core/recorder-constants";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import { Button, ButtonAnchor, ButtonLink } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { Alert } from "../components/common/Feedback";
@@ -33,6 +34,7 @@ const FLOATING_CAMERA_HEIGHT = 285;
 export function RecordPage() {
 	const recorder = useRecorder();
 	const floating = useFloatingWindow();
+	const navigate = useNavigate();
 	const [mode, setMode] = useState<DetectedDisplayRecordingMode>("fullscreen");
 	const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([]);
 	const [microphoneId, setMicrophoneId] = useState("");
@@ -132,6 +134,11 @@ export function RecordPage() {
 	const { open: openFloating, close: closeFloating } = floating;
 
 	const phase = recorder.phase;
+	const finishedVideoId = phase === "done" ? recorder.share?.id : undefined;
+	useEffect(() => {
+		if (finishedVideoId) navigate(`/v/${finishedVideoId}`);
+	}, [finishedVideoId, navigate]);
+
 	useEffect(() => {
 		if (phase !== "starting" && phase !== "recording" && phase !== "paused")
 			closeFloating();

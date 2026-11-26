@@ -305,6 +305,16 @@ export function Watch() {
 									{current.viewCount === 1 ? "view" : "views"}
 								</p>
 							</div>
+							<Button
+								variant="primary"
+								className="watch__copy"
+								startIcon={copied === "link" ? <Icons.Check /> : <Icons.Link />}
+								onClick={() =>
+									void copy("link", `${window.location.origin}/v/${id}`)
+								}
+							>
+								{copied === "link" ? "Copied" : "Copy link"}
+							</Button>
 						</div>
 					</div>
 

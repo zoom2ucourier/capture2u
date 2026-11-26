@@ -488,8 +488,13 @@
 
 .watch__meta {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: 10px;
+}
+
+.watch__copy {
+	margin-left: auto;
 }
 
 .watch__owner {
