@@ -1,13 +1,20 @@
 import type { DetectedDisplayRecordingMode } from "@cap/recorder-core/recorder-constants";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Button, ButtonAnchor, ButtonLink } from "../components/common/Button";
+import { Card } from "../components/common/Card";
+import { Alert } from "../components/common/Feedback";
+import { Icons } from "../components/common/Icons";
 import { formatDuration } from "../lib/api";
 import { useRecorder } from "../recorder/useRecorder";
 
-const MODES: { value: DetectedDisplayRecordingMode; label: string }[] = [
-	{ value: "fullscreen", label: "Entire screen" },
-	{ value: "window", label: "A window" },
-	{ value: "tab", label: "A browser tab" },
+const MODES: {
+	value: DetectedDisplayRecordingMode;
+	label: string;
+	Icon: typeof Icons.Monitor;
+}[] = [
+	{ value: "fullscreen", label: "Entire screen", Icon: Icons.Monitor },
+	{ value: "window", label: "A window", Icon: Icons.AppWindow },
+	{ value: "tab", label: "A browser tab", Icon: Icons.PanelTop },
 ];
 
 const NO_MICROPHONE = "__none__";
@@ -117,21 +124,38 @@ export function RecordPage() {
 
 	return (
 		<div className="record">
-			<h1>New recording</h1>
+			<div className="page-head">
+				<div className="page-head__text">
+					<h1 className="page-head__title">New recording</h1>
+					<p className="page-head__subtitle">
+						Record your screen and share a link.
+					</p>
+				</div>
+			</div>
 
 			{!busy && (
-				<div className="card record-setup">
-					<fieldset>
-						<legend>What to record</legend>
-						<div className="row">
+				<Card
+					title="Recording setup"
+					icon={<Icons.Video />}
+					className="record__setup"
+				>
+					<fieldset className="record__fieldset">
+						<legend className="field__label">What to record</legend>
+						<div className="option-tiles">
 							{MODES.map((option) => (
-								<label key={option.value} className="choice">
+								<label
+									key={option.value}
+									className={`option-tile${
+										mode === option.value ? " option-tile--selected" : ""
+									}`}
+								>
 									<input
 										type="radio"
 										name="mode"
 										checked={mode === option.value}
 										onChange={() => setMode(option.value)}
 									/>
+									<option.Icon size={22} />
 									{option.label}
 								</label>
 							))}
@@ -139,8 +163,12 @@ export function RecordPage() {
 					</fieldset>
 
 					<label className="field">
-						Microphone
+						<span className="field__label">
+							<Icons.Mic size={14} />
+							Microphone
+						</span>
 						<select
+							className="form-select"
 							value={microphoneId}
 							onChange={(event) => setMicrophoneId(event.target.value)}
 						>
@@ -156,7 +184,7 @@ export function RecordPage() {
 						</select>
 					</label>
 
-					<label className="choice">
+					<label className="check">
 						<input
 							type="checkbox"
 							checked={systemAudio}
@@ -165,7 +193,7 @@ export function RecordPage() {
 						Include computer sound (tick "share audio" when the browser asks)
 					</label>
 
-					<label className="choice">
+					<label className="check">
 						<input
 							type="checkbox"
 							checked={cameraOn}
@@ -174,36 +202,37 @@ export function RecordPage() {
 						Show my camera
 					</label>
 					{cameraOn && (
-						<div className="camera-row">
+						<div className="record__camera">
 							<video
 								ref={cameraVideoRef}
-								className="camera-preview"
+								className="record__camera-preview"
 								autoPlay
 								muted
 								playsInline
 							/>
 							<div>
-								<button
-									type="button"
-									className="button small"
+								<Button
+									size="sm"
+									startIcon={<Icons.PictureInPicture size={14} />}
 									onClick={() => void floatCamera()}
 								>
 									Float camera over my screen
-								</button>
-								<p className="muted small-text">
+								</Button>
+								<p className="field__hint">
 									The floating camera appears in the video when you record your
 									entire screen.
 								</p>
 							</div>
 						</div>
 					)}
-					{cameraError && <p className="alert">{cameraError}</p>}
-					{recorder.error && <p className="alert">{recorder.error}</p>}
+					{cameraError && <Alert>{cameraError}</Alert>}
+					{recorder.error && <Alert>{recorder.error}</Alert>}
 
-					<div className="row">
-						<button
-							type="button"
-							className="button primary"
+					<div className="record__actions">
+						<Button
+							variant="primary"
+							size="lg"
+							startIcon={<Icons.Record size={18} />}
 							onClick={() =>
 								void recorder.start({
 									mode,
@@ -214,72 +243,86 @@ export function RecordPage() {
 							}
 						>
 							Start recording
-						</button>
+						</Button>
 						{recorder.phase === "error" &&
 							recorder.finished &&
 							savedRecordingUrl && (
 								<>
-									<button
-										type="button"
-										className="button"
+									<Button
+										size="lg"
+										startIcon={<Icons.Refresh />}
 										onClick={recorder.retryUpload}
 									>
 										Retry upload
-									</button>
-									<a
-										className="button ghost"
+									</Button>
+									<ButtonAnchor
+										variant="ghost"
+										size="lg"
+										startIcon={<Icons.Download />}
 										href={savedRecordingUrl}
 										download={recorder.finished.fileName}
 									>
 										Save recording to this computer
-									</a>
+									</ButtonAnchor>
 								</>
 							)}
 					</div>
-				</div>
+				</Card>
 			)}
 
 			{recorder.phase === "starting" && (
-				<div className="card">
+				<div className="card record__status">
+					<span className="loading-state__spinner" />
 					<p>Choose what to share in the browser prompt…</p>
 				</div>
 			)}
 
 			{isLive && (
-				<div className="card live">
-					<p className="timer">
+				<div className="card record__live">
+					<p className="record__timer">
 						<span
 							className={
-								recorder.phase === "recording" ? "dot recording" : "dot"
+								recorder.phase === "recording"
+									? "record__dot record__dot--recording"
+									: "record__dot"
 							}
 						/>
 						{formatDuration(recorder.elapsedSeconds)}
-						{recorder.phase === "paused" ? " (paused)" : ""}
 					</p>
-					{recorder.notice && <p className="muted">{recorder.notice}</p>}
-					<div className="row">
+					<p className="record__phase">
+						{recorder.phase === "paused" ? "Paused" : "Recording"}
+					</p>
+					{recorder.notice && (
+						<p className="record__notice">{recorder.notice}</p>
+					)}
+					<div className="record__actions record__actions--centered">
 						{recorder.phase === "recording" ? (
-							<button type="button" className="button" onClick={recorder.pause}>
+							<Button
+								size="lg"
+								startIcon={<Icons.Pause />}
+								onClick={recorder.pause}
+							>
 								Pause
-							</button>
+							</Button>
 						) : (
-							<button
-								type="button"
-								className="button"
+							<Button
+								size="lg"
+								startIcon={<Icons.Play />}
 								onClick={recorder.resume}
 							>
 								Resume
-							</button>
+							</Button>
 						)}
-						<button
-							type="button"
-							className="button primary"
+						<Button
+							variant="primary"
+							size="lg"
+							startIcon={<Icons.Square />}
 							onClick={recorder.stop}
 						>
 							Stop and share
-						</button>
+						</Button>
 					</div>
-					<p className="muted small-text">
+					<p className="field__hint">
 						Keep this tab open while you record. You can switch to other
 						windows.
 					</p>
@@ -289,48 +332,81 @@ export function RecordPage() {
 			{(recorder.phase === "finishing" ||
 				recorder.phase === "uploading" ||
 				recorder.phase === "done") && (
-				<div className="card">
-					{recorder.phase === "finishing" && <p>Preparing your video…</p>}
+				<Card
+					title={
+						recorder.phase === "done"
+							? "Your video is ready"
+							: recorder.phase === "uploading"
+								? "Uploading your video"
+								: "Preparing your video…"
+					}
+					icon={
+						recorder.phase === "done" ? (
+							<Icons.CheckCircle className="icon--complete" />
+						) : (
+							<Icons.Video />
+						)
+					}
+				>
+					{recorder.phase === "finishing" && !recorder.share && (
+						<div className="record__status">
+							<span className="loading-state__spinner" />
+						</div>
+					)}
 					{recorder.share && (
-						<>
-							<p className="small-text muted">Your link</p>
-							<div className="row link-row">
+						<div className="field">
+							<span className="field__label">Your link</span>
+							<span className="record__link">
 								<input
+									className="form-input"
 									readOnly
 									value={recorder.share.url}
 									aria-label="Share link"
 									onFocus={(event) => event.target.select()}
 								/>
-								<button
-									type="button"
-									className="button"
+								<Button
+									startIcon={
+										copied ? (
+											<Icons.Check className="icon--complete" />
+										) : (
+											<Icons.Link />
+										)
+									}
 									onClick={() => void copyLink()}
 								>
 									{copied ? "Copied" : "Copy link"}
-								</button>
-							</div>
-						</>
+								</Button>
+							</span>
+						</div>
 					)}
 					{recorder.phase === "uploading" && (
 						<>
-							<progress value={recorder.progress} max={1} />
-							<p className="muted small-text">
+							<progress
+								className="progress"
+								value={recorder.progress}
+								max={1}
+							/>
+							<p className="field__hint">
 								Uploading {Math.round(recorder.progress * 100)}%. Keep this tab
 								open until it finishes.
 							</p>
 						</>
 					)}
 					{recorder.phase === "done" && recorder.share && (
-						<div className="row">
-							<Link className="button primary" to={`/v/${recorder.share.id}`}>
+						<div className="record__actions">
+							<ButtonLink
+								variant="primary"
+								startIcon={<Icons.Play />}
+								to={`/v/${recorder.share.id}`}
+							>
 								Open video
-							</Link>
-							<button type="button" className="button" onClick={recorder.reset}>
+							</ButtonLink>
+							<Button startIcon={<Icons.Record />} onClick={recorder.reset}>
 								Record another
-							</button>
+							</Button>
 						</div>
 					)}
-				</div>
+				</Card>
 			)}
 		</div>
 	);

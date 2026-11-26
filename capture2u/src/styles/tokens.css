@@ -1,0 +1,62 @@
+:root {
+	--l2u-primary: #2b93ff;
+	--l2u-primary-dark: #1c3e61;
+	--l2u-accent: #0bda8e;
+	--l2u-darkish: #01101f;
+
+	--status-started: #ff9500;
+	--status-complete: #0bda8e;
+	--status-failed: #ff5245;
+
+	--text-primary: #384553;
+	--text-secondary: #404040;
+	--text-muted: #737474;
+	--text-heading: #1c3e61;
+	--text-link: #2b93ff;
+	--text-inverse: #ffffff;
+
+	--bg-white: #ffffff;
+	--bg-light: #f4f7fb;
+	--bg-surface-1: #eaf2fb;
+	--bg-surface-2: #dee5ee;
+	--bg-surface-3: #c5cfdd;
+
+	--border: #dbdbdb;
+	--border-light: #e3e3e3;
+	--disabled: #c5cfdd;
+
+	--failed-tint: color-mix(in srgb, var(--status-failed) 8%, var(--bg-white));
+	--failed-border: color-mix(in srgb, var(--status-failed) 40%, var(--bg-white));
+	--overlay: rgb(1 16 31 / 0.8);
+	--focus-ring: 0 0 0 3px rgb(43 147 255 / 0.2);
+	--shadow-card: 0 4px 12px rgb(0 0 0 / 0.05);
+
+	--space-xs: 4px;
+	--space-sm: 8px;
+	--space-md: 12px;
+	--space-lg: 16px;
+	--space-xl: 24px;
+	--space-2xl: 32px;
+
+	--font-size-xs: 11px;
+	--font-size-sm: 12px;
+	--font-size-base: 13px;
+	--font-size-md: 14px;
+	--font-size-lg: 16px;
+	--font-size-xl: 20px;
+	--font-size-2xl: 24px;
+
+	--radius-sm: 4px;
+	--radius-md: 6px;
+	--radius-lg: 8px;
+	--radius-xl: 12px;
+	--radius-full: 9999px;
+
+	--header-height: 64px;
+	--transition: 0.2s ease;
+
+	color-scheme: light;
+	font-family:
+		"Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto,
+		sans-serif;
+}

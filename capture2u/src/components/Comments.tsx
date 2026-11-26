@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { REACTION_EMOJI, type VideoComment } from "../../shared/types";
 import { api, formatDate, formatDuration } from "../lib/api";
+import { Button } from "./common/Button";
+import { Card } from "./common/Card";
+import { Alert, Avatar } from "./common/Feedback";
+import { Icons } from "./common/Icons";
 
 interface CommentsProps {
 	videoId: string;
@@ -82,11 +86,19 @@ export function Comments({
 		all.filter((comment) => comment.parentId === id);
 
 	return (
-		<div className="card comments">
-			<h2>Comments</h2>
-			{error && <p className="alert">{error}</p>}
+		<Card
+			title="Comments"
+			icon={<Icons.MessageSquare />}
+			className="comments"
+			actions={
+				threads.length > 0 && (
+					<span className="chip__count">{threads.length}</span>
+				)
+			}
+		>
+			{error && <Alert>{error}</Alert>}
 
-			<div className="row reactions">
+			<div className="comments__reactions">
 				{REACTION_EMOJI.map((emoji) => {
 					const matching = reactions.filter(
 						(reaction) => reaction.body === emoji,
@@ -96,7 +108,7 @@ export function Comments({
 						<button
 							key={emoji}
 							type="button"
-							className={`button small reaction${mine ? " active" : ""}`}
+							className={`chip chip--reaction${mine ? " chip--active" : ""}`}
 							aria-pressed={mine}
 							aria-label={`React with ${emoji}`}
 							title={matching.map((reaction) => reaction.authorName).join(", ")}
@@ -110,7 +122,9 @@ export function Comments({
 							}
 						>
 							{emoji}
-							{matching.length > 0 && <span>{matching.length}</span>}
+							{matching.length > 0 && (
+								<span className="chip__count">{matching.length}</span>
+							)}
 						</button>
 					);
 				})}
@@ -130,6 +144,7 @@ export function Comments({
 				}}
 			>
 				<textarea
+					className="form-input form-textarea"
 					rows={2}
 					maxLength={4000}
 					placeholder="Add a comment"
@@ -137,8 +152,8 @@ export function Comments({
 					value={draft}
 					onChange={(event) => setDraft(event.target.value)}
 				/>
-				<div className="row">
-					<label className="choice">
+				<div className="comment-form__footer">
+					<label className="check">
 						<input
 							type="checkbox"
 							checked={atCurrentTime}
@@ -146,26 +161,29 @@ export function Comments({
 						/>
 						Link to the current moment
 					</label>
-					<button
+					<Button
 						type="submit"
-						className="button primary small"
+						variant="primary"
+						size="sm"
 						disabled={busy || !draft.trim()}
 					>
 						Comment
-					</button>
+					</Button>
 				</div>
 			</form>
 
-			{comments === null && !error && <p className="muted">Loading…</p>}
+			{comments === null && !error && (
+				<p className="comments__empty">Loading…</p>
+			)}
 			{comments !== null && threads.length === 0 && (
-				<p className="muted">No comments yet.</p>
+				<p className="comments__empty">No comments yet.</p>
 			)}
 
 			<ul className="comment-list">
 				{threads.map((comment) => (
-					<li key={comment.id}>
+					<li key={comment.id} className="comment-list__thread">
 						<CommentBody comment={comment} onSeek={onSeek} onDelete={remove} />
-						<ul className="comment-list replies">
+						<ul className="comment-list comment-list--replies">
 							{repliesTo(comment.id).map((reply) => (
 								<li key={reply.id}>
 									<CommentBody
@@ -178,7 +196,7 @@ export function Comments({
 						</ul>
 						{replyTo === comment.id ? (
 							<form
-								className="comment-form replies"
+								className="comment-form comment-form--reply"
 								onSubmit={(event) => {
 									event.preventDefault();
 									void post({
@@ -193,6 +211,7 @@ export function Comments({
 								}}
 							>
 								<textarea
+									className="form-input form-textarea"
 									rows={2}
 									maxLength={4000}
 									placeholder="Write a reply"
@@ -200,27 +219,28 @@ export function Comments({
 									value={replyDraft}
 									onChange={(event) => setReplyDraft(event.target.value)}
 								/>
-								<div className="row">
-									<button
+								<div className="comment-form__footer comment-form__footer--start">
+									<Button
 										type="submit"
-										className="button primary small"
+										variant="primary"
+										size="sm"
 										disabled={busy || !replyDraft.trim()}
 									>
 										Reply
-									</button>
-									<button
-										type="button"
-										className="button ghost small"
+									</Button>
+									<Button
+										variant="ghost"
+										size="sm"
 										onClick={() => setReplyTo(null)}
 									>
 										Cancel
-									</button>
+									</Button>
 								</div>
 							</form>
 						) : (
 							<button
 								type="button"
-								className="link-button replies"
+								className="link-button comment-list__reply"
 								onClick={() => {
 									setReplyTo(comment.id);
 									setReplyDraft("");
@@ -232,7 +252,7 @@ export function Comments({
 					</li>
 				))}
 			</ul>
-		</div>
+		</Card>
 	);
 }
 
@@ -248,29 +268,32 @@ function CommentBody({
 	const timestamp = comment.timestampSeconds;
 	return (
 		<div className="comment">
-			<p className="small-text">
-				<strong>{comment.authorName}</strong>{" "}
-				<span className="muted">{formatDate(comment.createdAt)}</span>
-				{timestamp !== null && (
-					<button
-						type="button"
-						className="link-button time"
-						onClick={() => onSeek(timestamp)}
-					>
-						{formatDuration(timestamp)}
-					</button>
-				)}
-				{comment.canDelete && (
-					<button
-						type="button"
-						className="link-button danger"
-						onClick={() => onDelete(comment)}
-					>
-						Delete
-					</button>
-				)}
-			</p>
-			<p className="comment-text">{comment.body}</p>
+			<Avatar name={comment.authorName} size="sm" />
+			<div className="comment__content">
+				<p className="comment__head">
+					<strong className="comment__author">{comment.authorName}</strong>
+					<span className="comment__date">{formatDate(comment.createdAt)}</span>
+					{timestamp !== null && (
+						<button
+							type="button"
+							className="timeline__time comment__time"
+							onClick={() => onSeek(timestamp)}
+						>
+							{formatDuration(timestamp)}
+						</button>
+					)}
+					{comment.canDelete && (
+						<button
+							type="button"
+							className="link-button link-button--danger"
+							onClick={() => onDelete(comment)}
+						>
+							Delete
+						</button>
+					)}
+				</p>
+				<p className="comment__text">{comment.body}</p>
+			</div>
 		</div>
 	);
 }

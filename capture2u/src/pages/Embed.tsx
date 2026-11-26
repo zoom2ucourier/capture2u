@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { WatchVideo } from "../../shared/types";
+import { ButtonAnchor } from "../components/common/Button";
+import { Logo } from "../components/common/Logo";
 import { Player } from "../components/Player";
 import { ApiRequestError, api } from "../lib/api";
 
@@ -58,7 +60,8 @@ export function Embed() {
 		);
 
 	return (
-		<div className="embed embed-message">
+		<div className="embed embed--message">
+			{state.kind !== "loading" && <Logo variant="blue" height={32} />}
 			<p>
 				{state.kind === "loading" && "Loading…"}
 				{state.kind === "ready" && "This video is not ready yet."}
@@ -67,14 +70,15 @@ export function Embed() {
 					"This video does not exist or has been deleted."}
 			</p>
 			{state.kind !== "loading" && state.kind !== "missing" && (
-				<a
-					className="button primary small"
+				<ButtonAnchor
+					variant="primary"
+					size="sm"
 					href={shareUrl}
 					target="_blank"
 					rel="noreferrer"
 				>
 					Open in Capture2u
-				</a>
+				</ButtonAnchor>
 			)}
 		</div>
 	);

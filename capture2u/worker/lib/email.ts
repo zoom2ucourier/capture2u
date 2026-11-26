@@ -20,12 +20,13 @@ export async function sendEmail(env: Env, message: OutgoingEmail) {
 }
 
 const layout = (body: string, footer: string) =>
-	`<div style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#111827;line-height:1.5">` +
-	`<p style="font-weight:700;font-size:18px;margin:0 0 16px">Capture2u</p>${body}` +
-	`<p style="color:#6b7280;font-size:13px;margin:24px 0 0">${footer}</p></div>`;
+	`<div style="background:#F4F7FB;padding:24px 12px">` +
+	`<div style="font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;background:#FFFFFF;border:1px solid #E3E3E3;border-radius:12px;color:#384553;font-size:14px;line-height:1.5">` +
+	`<p style="font-weight:700;font-size:18px;color:#1C3E61;margin:0 0 16px;padding:0 0 12px;border-bottom:2px solid #2B93FF">Capture2u</p>${body}` +
+	`<p style="color:#737474;font-size:12px;margin:24px 0 0">${footer}</p></div></div>`;
 
 const button = (url: string, label: string) =>
-	`<p style="margin:20px 0"><a href="${escapeHtml(url)}" style="background:#1d4ed8;color:#ffffff;text-decoration:none;font-weight:600;padding:10px 16px;border-radius:8px;display:inline-block">${escapeHtml(label)}</a></p>`;
+	`<p style="margin:20px 0"><a href="${escapeHtml(url)}" style="background:#2B93FF;color:#FFFFFF;text-decoration:none;font-weight:500;padding:10px 16px;border-radius:6px;display:inline-block">${escapeHtml(label)}</a></p>`;
 
 const NOTIFICATION_FOOTER =
 	"You can turn these emails off on the My videos page in Capture2u.";
@@ -41,7 +42,7 @@ export function loginCodeEmail(
 		text: `Your Capture2u sign-in code is ${code}\n\nIt works for ${minutes} minutes. If you did not ask for it, you can ignore this email.`,
 		html: layout(
 			`<p style="margin:0 0 8px">Your sign-in code is</p>` +
-				`<p style="font-size:32px;font-weight:700;letter-spacing:6px;margin:0 0 8px">${escapeHtml(code)}</p>` +
+				`<p style="font-size:32px;font-weight:700;letter-spacing:6px;color:#1C3E61;margin:0 0 8px">${escapeHtml(code)}</p>` +
 				`<p style="margin:0">It works for ${minutes} minutes.</p>`,
 			"If you did not ask for this code, you can ignore this email.",
 		),
@@ -65,7 +66,7 @@ export function commentEmail(input: {
 		text: `${input.actorName} ${action} "${input.videoTitle}":\n\n${excerpt}\n\n${input.url}\n\n${NOTIFICATION_FOOTER}`,
 		html: layout(
 			`<p style="margin:0 0 12px"><strong>${escapeHtml(input.actorName)}</strong> ${action} <strong>${escapeHtml(input.videoTitle)}</strong>:</p>` +
-				`<p style="margin:0;padding:12px;background:#f5f6f8;border-radius:8px;white-space:pre-wrap">${escapeHtml(excerpt)}</p>` +
+				`<p style="margin:0;padding:12px;background:#F4F7FB;border-radius:8px;white-space:pre-wrap">${escapeHtml(excerpt)}</p>` +
 				button(input.url, "Open the video"),
 			NOTIFICATION_FOOTER,
 		),

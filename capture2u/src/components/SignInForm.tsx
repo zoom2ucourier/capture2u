@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { LOGIN_CODE_LENGTH } from "../../shared/types";
 import { useAuth } from "../auth";
 import { getConfig } from "../lib/api";
+import { Button } from "./common/Button";
+import { Alert } from "./common/Feedback";
 
 const messageOf = (cause: unknown, fallback: string) =>
 	cause instanceof Error && cause.message && cause.message !== "request_failed"
@@ -64,34 +66,38 @@ export function SignInForm({ intro }: { intro: string }) {
 	if (step === "email")
 		return (
 			<form
+				className="sign-in-form"
 				onSubmit={(event) => {
 					event.preventDefault();
 					void send(false);
 				}}
 			>
-				<p className="muted">{intro}</p>
-				{(error ?? accountError) && (
-					<p className="alert">{error ?? accountError}</p>
-				)}
-				<input
-					type="email"
-					required
-					autoComplete="email"
-					inputMode="email"
-					placeholder="you@locate2u.com"
-					aria-label="Work email address"
-					value={email}
-					onChange={(event) => setEmail(event.target.value)}
-				/>
-				<button
+				<p className="sign-in-form__intro">{intro}</p>
+				{(error ?? accountError) && <Alert>{error ?? accountError}</Alert>}
+				<label className="field">
+					<span className="field__label">Work email</span>
+					<input
+						className="form-input"
+						type="email"
+						required
+						autoComplete="email"
+						inputMode="email"
+						placeholder="you@locate2u.com"
+						value={email}
+						onChange={(event) => setEmail(event.target.value)}
+					/>
+				</label>
+				<Button
 					type="submit"
-					className="button primary"
-					disabled={busy || !address}
+					variant="primary"
+					size="lg"
+					fullWidth
+					disabled={busy}
 				>
 					{busy ? "Sending…" : "Email me a code"}
-				</button>
+				</Button>
 				{domains.length > 0 && (
-					<p className="muted small-text">
+					<p className="field__hint">
 						Works with {domains.map((domain) => `@${domain}`).join(", ")}{" "}
 						addresses.
 					</p>
@@ -101,19 +107,20 @@ export function SignInForm({ intro }: { intro: string }) {
 
 	return (
 		<form
+			className="sign-in-form"
 			onSubmit={(event) => {
 				event.preventDefault();
 				void verify();
 			}}
 		>
-			<p className="muted">
+			<p className="sign-in-form__intro">
 				Enter the {LOGIN_CODE_LENGTH}-digit code we sent to{" "}
 				<strong>{address}</strong>.
 			</p>
-			{error && <p className="alert">{error}</p>}
-			{notice && <p className="muted small-text">{notice}</p>}
+			{error && <Alert>{error}</Alert>}
+			{notice && <p className="field__hint">{notice}</p>}
 			<input
-				className="code-input"
+				className="form-input form-input--code"
 				type="text"
 				required
 				inputMode="numeric"
@@ -129,25 +136,27 @@ export function SignInForm({ intro }: { intro: string }) {
 					)
 				}
 			/>
-			<button
+			<Button
 				type="submit"
-				className="button primary"
+				variant="primary"
+				size="lg"
+				fullWidth
 				disabled={busy || code.length !== LOGIN_CODE_LENGTH}
 			>
 				{busy ? "Checking…" : "Sign in"}
-			</button>
-			<div className="row centered">
-				<button
-					type="button"
-					className="button ghost small"
+			</Button>
+			<div className="sign-in-form__links">
+				<Button
+					variant="ghost"
+					size="sm"
 					disabled={busy}
 					onClick={() => void send(true)}
 				>
 					Send a new code
-				</button>
-				<button
-					type="button"
-					className="button ghost small"
+				</Button>
+				<Button
+					variant="ghost"
+					size="sm"
 					disabled={busy}
 					onClick={() => {
 						setStep("email");
@@ -156,7 +165,7 @@ export function SignInForm({ intro }: { intro: string }) {
 					}}
 				>
 					Use another email
-				</button>
+				</Button>
 			</div>
 		</form>
 	);

@@ -1,55 +1,59 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
+import { Button, ButtonLink } from "./components/common/Button";
+import { Avatar, LoadingState } from "./components/common/Feedback";
+import { Icons } from "./components/common/Icons";
+import { AppHeader } from "./components/layout/AppHeader";
+import { GateCard } from "./components/layout/GateCard";
 import { SignInForm } from "./components/SignInForm";
 import { Embed } from "./pages/Embed";
 import { Library } from "./pages/Library";
 import { RecordPage } from "./pages/Record";
 import { Watch } from "./pages/Watch";
-import "./styles.css";
+import "@fontsource-variable/inter";
+import "./styles/index.css";
 
 function SignInScreen() {
 	return (
-		<main className="center-screen">
-			<div className="card sign-in">
-				<h1>Capture2u</h1>
-				<SignInForm intro="Record your screen and share a link. Sign in with your work email." />
-			</div>
-		</main>
+		<GateCard title="Capture2u">
+			<SignInForm intro="Record your screen and share a link. Sign in with your work email." />
+		</GateCard>
 	);
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
 	const { user, signOut } = useAuth();
 	return (
-		<>
-			<header className="topbar">
-				<Link to="/" className="brand">
-					Capture2u
-				</Link>
-				<nav>
-					<Link to="/record" className="button primary small">
-						New recording
-					</Link>
-					<span className="muted user-email">{user?.email}</span>
-					<button
-						type="button"
-						className="button ghost small"
-						onClick={() => void signOut()}
-					>
-						Sign out
-					</button>
-				</nav>
-			</header>
+		<div className="app">
+			<AppHeader>
+				<ButtonLink to="/record" variant="primary" startIcon={<Icons.Record />}>
+					New recording
+				</ButtonLink>
+				{user && (
+					<span className="app-header__user">
+						<Avatar name={user.fullName ?? user.email} />
+						<span className="app-header__email">{user.email}</span>
+					</span>
+				)}
+				<Button
+					variant="ghost"
+					aria-label="Sign out"
+					startIcon={<Icons.LogOut />}
+					onClick={() => void signOut()}
+				>
+					<span className="app-header__sign-out">Sign out</span>
+				</Button>
+			</AppHeader>
 			<main className="page">{children}</main>
-		</>
+		</div>
 	);
 }
 
 function Protected({ children }: { children: React.ReactNode }) {
 	const { loading, user } = useAuth();
-	if (loading) return <main className="center-screen muted">Loading…</main>;
+	if (loading) return <LoadingState fullScreen />;
 	if (!user) return <SignInScreen />;
 	return <Shell>{children}</Shell>;
 }

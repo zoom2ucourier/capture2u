@@ -2,6 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Folder, LibraryVideo } from "../../shared/types";
 import { useAuth } from "../auth";
+import { Button, ButtonLink } from "../components/common/Button";
+import { Card } from "../components/common/Card";
+import { Alert, EmptyState, LoadingState } from "../components/common/Feedback";
+import { Icons } from "../components/common/Icons";
 import { ApiRequestError, api, formatDate, formatDuration } from "../lib/api";
 
 const VISIBILITY_LABEL: Record<LibraryVideo["visibility"], string> = {
@@ -10,7 +14,17 @@ const VISIBILITY_LABEL: Record<LibraryVideo["visibility"], string> = {
 	private: "Only me",
 };
 
+const VISIBILITY_ICON: Record<LibraryVideo["visibility"], typeof Icons.Globe> =
+	{
+		public: Icons.Globe,
+		company: Icons.Briefcase,
+		private: Icons.Lock,
+	};
+
 const NO_FOLDER = "";
+
+const countLabel = (count: number) =>
+	`${count} ${count === 1 ? "video" : "videos"}`;
 
 export function Library() {
 	const { user, setEmailNotifications } = useAuth();
@@ -141,10 +155,22 @@ export function Library() {
 	const myFolders = folders.filter((folder) => folder.isOwner);
 	const sharedWithMe = folders.filter((folder) => !folder.isOwner);
 
+	const subtitle =
+		selected && !selected.isOwner
+			? `Shared with the company by ${selected.ownerName ?? "a colleague"}`
+			: videos
+				? countLabel(videos.length)
+				: "";
+
 	return (
-		<>
+		<div className="library">
 			<div className="page-head">
-				<h1>{selected ? selected.name : "My videos"}</h1>
+				<div className="page-head__text">
+					<h1 className="page-head__title">
+						{selected ? selected.name : "My videos"}
+					</h1>
+					{subtitle && <p className="page-head__subtitle">{subtitle}</p>}
+				</div>
 				<form
 					className="search"
 					onSubmit={(event) => {
@@ -152,59 +178,73 @@ export function Library() {
 						setQuery(search.trim());
 					}}
 				>
-					<input
-						type="search"
-						placeholder="Search titles and what was said"
-						aria-label="Search videos"
-						value={search}
-						onChange={(event) => setSearch(event.target.value)}
-					/>
-					<button type="submit" className="button small">
-						Search
-					</button>
+					<div className="search__field">
+						<Icons.Search className="search__icon" />
+						<input
+							className="form-input search__input"
+							type="search"
+							placeholder="Search titles and what was said"
+							aria-label="Search videos"
+							value={search}
+							onChange={(event) => setSearch(event.target.value)}
+						/>
+					</div>
+					<Button type="submit">Search</Button>
 				</form>
 			</div>
 
-			<div className="row folder-bar">
+			<div className="folder-bar">
 				<button
 					type="button"
-					className={`button small chip${folderId === null ? " active" : ""}`}
+					className={`chip${folderId === null ? " chip--active" : ""}`}
 					aria-pressed={folderId === null}
 					onClick={() => setFolderId(null)}
 				>
+					<Icons.Video size={14} />
 					All my videos
 				</button>
 				{myFolders.map((folder) => (
 					<button
 						key={folder.id}
 						type="button"
-						className={`button small chip${folderId === folder.id ? " active" : ""}`}
+						className={`chip${folderId === folder.id ? " chip--active" : ""}`}
 						aria-pressed={folderId === folder.id}
 						onClick={() => setFolderId(folder.id)}
 					>
-						{folder.name} ({folder.videoCount})
-						{folder.shared ? " · Shared" : ""}
+						<Icons.Folder size={14} />
+						{folder.name}
+						<span className="chip__count">{folder.videoCount}</span>
+						{folder.shared && (
+							<span className="chip__note">
+								<Icons.Users size={12} />
+								Shared
+							</span>
+						)}
 					</button>
 				))}
 				{sharedWithMe.map((folder) => (
 					<button
 						key={folder.id}
 						type="button"
-						className={`button small chip${folderId === folder.id ? " active" : ""}`}
+						className={`chip${folderId === folder.id ? " chip--active" : ""}`}
 						aria-pressed={folderId === folder.id}
 						onClick={() => setFolderId(folder.id)}
 					>
-						{folder.name} ({folder.videoCount}) · {folder.ownerName ?? "Shared"}
+						<Icons.Users size={14} />
+						{folder.name}
+						<span className="chip__count">{folder.videoCount}</span>
+						<span className="chip__note">{folder.ownerName ?? "Shared"}</span>
 					</button>
 				))}
 				<form
-					className="row new-folder"
+					className="folder-bar__new"
 					onSubmit={(event) => {
 						event.preventDefault();
 						void createFolder();
 					}}
 				>
 					<input
+						className="form-input form-input--sm"
 						type="text"
 						maxLength={80}
 						placeholder="New folder"
@@ -212,13 +252,14 @@ export function Library() {
 						value={newFolder}
 						onChange={(event) => setNewFolder(event.target.value)}
 					/>
-					<button
+					<Button
 						type="submit"
-						className="button small"
+						size="sm"
+						startIcon={<Icons.Plus size={14} />}
 						disabled={!newFolder.trim()}
 					>
 						Add folder
-					</button>
+					</Button>
 				</form>
 			</div>
 
@@ -231,116 +272,146 @@ export function Library() {
 					onDelete={() => void removeFolder(selected)}
 				/>
 			)}
-			{selected && !selected.isOwner && (
-				<p className="muted">
-					Shared with the company by {selected.ownerName ?? "a colleague"}.
-				</p>
-			)}
 
-			{error && <p className="alert">{error}</p>}
-			{videos === null && !error && <p className="muted">Loading…</p>}
+			{error && <Alert>{error}</Alert>}
+			{videos === null && !error && <LoadingState />}
 			{videos?.length === 0 && (
-				<div className="card empty">
-					<p>
-						{query
-							? "No videos match that search."
-							: selected
-								? "This folder is empty."
-								: "No recordings yet."}
-					</p>
-					{!query && !selected && (
-						<Link to="/record" className="button primary">
-							Record your first video
-						</Link>
-					)}
+				<div className="card">
+					<EmptyState
+						icon={query ? <Icons.Search /> : <Icons.Video />}
+						title={
+							query
+								? "No videos match that search."
+								: selected
+									? "This folder is empty."
+									: "No recordings yet."
+						}
+						action={
+							!query && !selected ? (
+								<ButtonLink
+									to="/record"
+									variant="primary"
+									startIcon={<Icons.Record />}
+								>
+									Record your first video
+								</ButtonLink>
+							) : undefined
+						}
+					/>
 				</div>
 			)}
 
-			<div className="grid">
-				{videos?.map((video) => (
-					<article key={video.id} className="card video-card">
-						<Link to={`/v/${video.id}`} className="thumb">
-							{video.thumbnailUrl ? (
-								<img src={video.thumbnailUrl} alt="" loading="lazy" />
-							) : (
-								<div className="thumb-placeholder" />
-							)}
-							{video.status === "ready" ? (
-								<span className="badge duration">
-									{formatDuration(video.durationSeconds)}
-								</span>
-							) : (
-								<span className="badge warn">
-									{video.status === "uploading" ? "Uploading" : "Failed"}
-								</span>
-							)}
-						</Link>
-						<div className="video-meta">
-							<Link to={`/v/${video.id}`} className="video-title">
-								{video.title}
+			<div className="video-grid">
+				{videos?.map((video) => {
+					const VisibilityIcon = VISIBILITY_ICON[video.visibility];
+					return (
+						<article key={video.id} className="video-card">
+							<Link to={`/v/${video.id}`} className="video-card__thumb">
+								{video.thumbnailUrl ? (
+									<img src={video.thumbnailUrl} alt="" loading="lazy" />
+								) : (
+									<div className="video-card__placeholder">
+										<Icons.Video size={32} />
+									</div>
+								)}
+								{video.status === "ready" ? (
+									<span className="video-card__badge">
+										{formatDuration(video.durationSeconds)}
+									</span>
+								) : (
+									<span
+										className={`video-card__badge video-card__badge--${
+											video.status === "uploading" ? "started" : "failed"
+										}`}
+									>
+										{video.status === "uploading" ? "Uploading" : "Failed"}
+									</span>
+								)}
 							</Link>
-							<p className="muted small-text">
-								{video.isOwner ? "" : `${video.ownerName ?? "A colleague"} · `}
-								{formatDate(video.createdAt)} · {video.viewCount}{" "}
-								{video.viewCount === 1 ? "view" : "views"} ·{" "}
-								{VISIBILITY_LABEL[video.visibility]}
-								{video.hasPassword ? " · Password" : ""}
-							</p>
-							{video.isOwner && (
-								<>
-									<p className="muted small-text">
+							<div className="video-card__body">
+								<Link to={`/v/${video.id}`} className="video-card__title">
+									{video.title}
+								</Link>
+								<p className="video-card__meta">
+									{video.isOwner
+										? ""
+										: `${video.ownerName ?? "A colleague"} · `}
+									{formatDate(video.createdAt)} · {video.viewCount}{" "}
+									{video.viewCount === 1 ? "view" : "views"}
+								</p>
+								<p className="video-card__meta video-card__meta--icon">
+									<VisibilityIcon size={13} />
+									{VISIBILITY_LABEL[video.visibility]}
+									{video.hasPassword ? " · Password" : ""}
+								</p>
+								{video.isOwner && (video.keep || video.expiresAt) && (
+									<p className="video-card__meta video-card__meta--icon">
+										{video.keep ? (
+											<Icons.Bookmark size={13} />
+										) : (
+											<Icons.Clock size={13} />
+										)}
 										{video.keep
 											? "Kept. Will not be auto-deleted."
 											: video.expiresAt
 												? `Auto-deletes ${formatDate(video.expiresAt)}`
 												: ""}
 									</p>
-									<div className="row">
-										<button
-											type="button"
-											className="button ghost small"
+								)}
+							</div>
+							{video.isOwner && (
+								<div className="video-card__footer">
+									{myFolders.length > 0 && (
+										<select
+											className="form-select form-select--sm"
+											aria-label={`Folder for ${video.title}`}
+											value={video.folderId ?? NO_FOLDER}
+											onChange={(event) =>
+												void updateVideo(video, {
+													folderId: event.target.value || null,
+												})
+											}
+										>
+											<option value={NO_FOLDER}>No folder</option>
+											{myFolders.map((folder) => (
+												<option key={folder.id} value={folder.id}>
+													{folder.name}
+												</option>
+											))}
+										</select>
+									)}
+									<div className="video-card__actions">
+										<Button
+											variant="ghost"
+											size="sm"
+											active={video.keep}
+											startIcon={<Icons.Bookmark size={14} />}
 											onClick={() =>
 												void updateVideo(video, { keep: !video.keep })
 											}
 										>
 											{video.keep ? "Stop keeping" : "Keep"}
-										</button>
-										<button
-											type="button"
-											className="button ghost small danger"
+										</Button>
+										<Button
+											variant="danger"
+											size="sm"
+											iconOnly
+											aria-label={`Delete ${video.title}`}
+											title="Delete"
 											onClick={() => void removeVideo(video)}
 										>
-											Delete
-										</button>
-										{myFolders.length > 0 && (
-											<select
-												className="small"
-												aria-label={`Folder for ${video.title}`}
-												value={video.folderId ?? NO_FOLDER}
-												onChange={(event) =>
-													void updateVideo(video, {
-														folderId: event.target.value || null,
-													})
-												}
-											>
-												<option value={NO_FOLDER}>No folder</option>
-												{myFolders.map((folder) => (
-													<option key={folder.id} value={folder.id}>
-														{folder.name}
-													</option>
-												))}
-											</select>
-										)}
+											<Icons.Trash size={14} />
+										</Button>
 									</div>
-								</>
+								</div>
 							)}
-						</div>
-					</article>
-				))}
+						</article>
+					);
+				})}
 			</div>
 
 			{user && (
-				<label className="choice muted preferences">
+				<label className="check library__preferences">
 					<input
 						type="checkbox"
 						checked={user.emailNotifications}
@@ -353,7 +424,7 @@ export function Library() {
 					Email me when someone comments on or first watches my videos
 				</label>
 			)}
-		</>
+		</div>
 	);
 }
 
@@ -371,33 +442,38 @@ function FolderSettings({
 	const [name, setName] = useState(folder.name);
 	const changed = name.trim() !== "" && name.trim() !== folder.name;
 	return (
-		<div className="card folder-settings">
+		<Card
+			title="Folder settings"
+			icon={<Icons.Folder />}
+			className="folder-settings"
+		>
 			<form
-				className="row"
+				className="folder-settings__row"
 				onSubmit={(event) => {
 					event.preventDefault();
 					if (changed) onRename(name.trim());
 				}}
 			>
 				<input
+					className="form-input"
 					type="text"
 					maxLength={80}
 					aria-label="Folder name"
 					value={name}
 					onChange={(event) => setName(event.target.value)}
 				/>
-				<button type="submit" className="button small" disabled={!changed}>
+				<Button type="submit" disabled={!changed}>
 					Rename
-				</button>
-				<button
-					type="button"
-					className="button ghost small danger"
+				</Button>
+				<Button
+					variant="danger"
+					startIcon={<Icons.Trash size={14} />}
 					onClick={onDelete}
 				>
 					Delete folder
-				</button>
+				</Button>
 			</form>
-			<label className="choice">
+			<label className="check">
 				<input
 					type="checkbox"
 					checked={folder.shared}
@@ -405,10 +481,10 @@ function FolderSettings({
 				/>
 				Share this folder with the company
 			</label>
-			<p className="muted small-text">
+			<p className="field__hint">
 				Signed-in staff can browse a shared folder. Videos set to "Only me" stay
 				hidden.
 			</p>
-		</div>
+		</Card>
 	);
 }

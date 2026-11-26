@@ -1,8 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import type { Visibility, WatchVideo } from "../../shared/types";
 import { useAuth } from "../auth";
 import { Comments } from "../components/Comments";
+import { Button, ButtonAnchor, ButtonLink } from "../components/common/Button";
+import { Card } from "../components/common/Card";
+import {
+	Alert,
+	Avatar,
+	LoadingState,
+	StatusBadge,
+} from "../components/common/Feedback";
+import { Icons } from "../components/common/Icons";
+import { AppHeader } from "../components/layout/AppHeader";
+import { GateCard } from "../components/layout/GateCard";
 import { Player, type PlayerHandle } from "../components/Player";
 import { SignInForm } from "../components/SignInForm";
 import { ApiRequestError, api, formatDate, formatDuration } from "../lib/api";
@@ -178,68 +189,81 @@ export function Watch() {
 		navigate("/");
 	};
 
-	if (state.kind === "loading")
-		return <main className="center-screen muted">Loading…</main>;
+	if (state.kind === "loading") return <LoadingState fullScreen />;
+
+	if (state.kind === "password")
+		return (
+			<GateCard title="Password needed" icon={<Icons.Lock />}>
+				<form className="sign-in-form" onSubmit={(event) => void unlock(event)}>
+					<p className="sign-in-form__intro">
+						This video is protected by a password.
+					</p>
+					{state.wrong && <Alert>That password is wrong.</Alert>}
+					<input
+						className="form-input"
+						type="password"
+						value={password}
+						aria-label="Video password"
+						onChange={(event) => setPassword(event.target.value)}
+					/>
+					<Button type="submit" variant="primary" size="lg" fullWidth>
+						Watch
+					</Button>
+				</form>
+			</GateCard>
+		);
+
+	if (state.kind === "sign-in")
+		return (
+			<GateCard title="Capture2u">
+				<SignInForm intro="Sign in with your work email to watch this video." />
+			</GateCard>
+		);
 
 	if (state.kind !== "ready")
 		return (
-			<main className="center-screen">
-				<div className="card sign-in">
-					<h1>Capture2u</h1>
-					{state.kind === "password" && (
-						<form onSubmit={(event) => void unlock(event)}>
-							<p>This video is protected by a password.</p>
-							{state.wrong && <p className="alert">That password is wrong.</p>}
-							<input
-								type="password"
-								value={password}
-								aria-label="Video password"
-								onChange={(event) => setPassword(event.target.value)}
-							/>
-							<button type="submit" className="button primary">
-								Watch
-							</button>
-						</form>
-					)}
-					{state.kind === "sign-in" && (
-						<SignInForm intro="Sign in with your work email to watch this video." />
-					)}
-					{state.kind === "private" && (
-						<p>This video is private to its owner.</p>
-					)}
-					{state.kind === "missing" && (
-						<p>This video does not exist or has been deleted.</p>
-					)}
-					{state.kind === "error" && (
-						<p>Something went wrong loading this video. Please try again.</p>
-					)}
-				</div>
-			</main>
+			<GateCard
+				title={
+					state.kind === "private"
+						? "Private video"
+						: state.kind === "missing"
+							? "Video not found"
+							: "Something went wrong"
+				}
+				icon={state.kind === "private" ? <Icons.Lock /> : <Icons.AlertCircle />}
+			>
+				<p className="sign-in-form__intro">
+					{state.kind === "private" && "This video is private to its owner."}
+					{state.kind === "missing" &&
+						"This video does not exist or has been deleted."}
+					{state.kind === "error" &&
+						"Something went wrong loading this video. Please try again."}
+				</p>
+			</GateCard>
 		);
 
 	const current = state.video;
+	const ownerName = current.ownerName ?? "Unknown";
 	return (
-		<div className="watch">
-			<header className="topbar">
-				<Link to="/" className="brand">
-					Capture2u
-				</Link>
-				<nav>
-					<button
-						type="button"
-						className="button small"
-						onClick={() =>
-							void copy("link", `${window.location.origin}/v/${id}`)
-						}
-					>
-						{copied === "link" ? "Copied" : "Copy link"}
-					</button>
-				</nav>
-			</header>
+		<div className="app">
+			<AppHeader>
+				{signedIn && (
+					<ButtonLink to="/" variant="ghost" startIcon={<Icons.Video />}>
+						My videos
+					</ButtonLink>
+				)}
+				<Button
+					variant="primary"
+					startIcon={copied === "link" ? <Icons.Check /> : <Icons.Link />}
+					onClick={() => void copy("link", `${window.location.origin}/v/${id}`)}
+				>
+					{copied === "link" ? "Copied" : "Copy link"}
+				</Button>
+			</AppHeader>
 
-			<main className="page watch-layout">
-				<section>
-					<div className="player">
+			<main className="page watch">
+				<section className="watch__main">
+					<div className="watch__player">
 						{current.playback ? (
 							<Player
 								ref={playerRef}
@@ -250,7 +274,12 @@ export function Watch() {
 								onFirstPlay={recordView}
 							/>
 						) : (
-							<div className="player-placeholder">
+							<div className="watch__player-placeholder">
+								<StatusBadge
+									tone={current.status === "uploading" ? "started" : "failed"}
+								>
+									{current.status === "uploading" ? "Uploading" : "Failed"}
+								</StatusBadge>
 								{current.status === "uploading"
 									? "This video is still uploading. This page will update when it is ready."
 									: "This video failed to upload."}
@@ -258,23 +287,33 @@ export function Watch() {
 						)}
 					</div>
 
-					<TitleEditor
-						key={current.title}
-						title={current.title}
-						editable={current.isOwner}
-						onSave={(title) => void patch({ title })}
-					/>
-					<p className="muted small-text">
-						{current.ownerName ?? "Unknown"} · {formatDate(current.createdAt)} ·{" "}
-						{formatDuration(visibleDuration(current))} · {current.viewCount}{" "}
-						{current.viewCount === 1 ? "view" : "views"}
-					</p>
+					<div className="watch__heading">
+						<TitleEditor
+							key={current.title}
+							title={current.title}
+							editable={current.isOwner}
+							onSave={(title) => void patch({ title })}
+						/>
+						<div className="watch__meta">
+							<Avatar name={ownerName} />
+							<div>
+								<p className="watch__owner">{ownerName}</p>
+								<p className="watch__details">
+									{formatDate(current.createdAt)} ·{" "}
+									{formatDuration(visibleDuration(current))} ·{" "}
+									{current.viewCount}{" "}
+									{current.viewCount === 1 ? "view" : "views"}
+								</p>
+							</div>
+						</div>
+					</div>
 
 					{current.playback && (
-						<div className="row">
-							<label className="field inline">
+						<div className="watch__toolbar">
+							<label className="watch__speed">
 								Speed
 								<select
+									className="form-select form-select--sm"
 									value={speed}
 									onChange={(event) => setSpeed(Number(event.target.value))}
 								>
@@ -286,31 +325,43 @@ export function Watch() {
 								</select>
 							</label>
 							{current.playback.downloadUrl && (
-								<a
-									className="button ghost small"
+								<ButtonAnchor
+									size="sm"
+									startIcon={<Icons.Download size={14} />}
 									href={current.playback.downloadUrl}
 								>
 									Download
-								</a>
+								</ButtonAnchor>
 							)}
-							<button
-								type="button"
-								className="button ghost small"
+							<Button
+								size="sm"
+								startIcon={
+									copied === "embed" ? (
+										<Icons.Check size={14} className="icon--complete" />
+									) : (
+										<Icons.Code size={14} />
+									)
+								}
 								onClick={() =>
 									void copy("embed", embedCode(current.id, current.title))
 								}
 							>
 								{copied === "embed" ? "Embed code copied" : "Copy embed code"}
-							</button>
+							</Button>
 						</div>
 					)}
 
 					{current.isOwner && (
-						<div className="card owner-controls">
-							<h2>Sharing</h2>
+						<Card
+							title="Sharing"
+							icon={<Icons.Share />}
+							className="watch__owner-controls"
+							actions={notice && <span className="card__notice">{notice}</span>}
+						>
 							<label className="field">
-								Who can watch
+								<span className="field__label">Who can watch</span>
 								<select
+									className="form-select"
 									value={current.visibility}
 									onChange={(event) =>
 										void patch({
@@ -350,31 +401,35 @@ export function Watch() {
 									}}
 								/>
 							)}
-							<label className="choice">
-								<input
-									type="checkbox"
-									checked={current.keep === true}
-									onChange={(event) =>
-										void patch({ keep: event.target.checked })
-									}
-								/>
-								Keep this video (never auto-delete)
-							</label>
-							{current.expiresAt && (
-								<p className="muted small-text">
-									Will be deleted automatically on{" "}
-									{formatDate(current.expiresAt)}.
-								</p>
-							)}
-							<button
-								type="button"
-								className="button ghost small danger"
-								onClick={() => void remove()}
-							>
-								Delete video
-							</button>
-							{notice && <p className="muted small-text">{notice}</p>}
-						</div>
+							<div className="watch__retention">
+								<label className="check">
+									<input
+										type="checkbox"
+										checked={current.keep === true}
+										onChange={(event) =>
+											void patch({ keep: event.target.checked })
+										}
+									/>
+									Keep this video (never auto-delete)
+								</label>
+								{current.expiresAt && (
+									<p className="field__hint">
+										Will be deleted automatically on{" "}
+										{formatDate(current.expiresAt)}.
+									</p>
+								)}
+							</div>
+							<div className="watch__danger">
+								<Button
+									variant="danger"
+									size="sm"
+									startIcon={<Icons.Trash size={14} />}
+									onClick={() => void remove()}
+								>
+									Delete video
+								</Button>
+							</div>
+						</Card>
 					)}
 
 					{signedIn ? (
@@ -385,71 +440,79 @@ export function Watch() {
 							onSeek={seek}
 						/>
 					) : (
-						<div className="card comments">
-							<h2>Comments</h2>
+						<Card title="Comments" icon={<Icons.MessageSquare />}>
 							{commentSignIn ? (
-								<div className="sign-in inline-sign-in">
+								<div className="watch__comment-sign-in">
 									<SignInForm intro="Sign in with your work email to comment." />
 								</div>
 							) : (
-								<div className="row">
-									<span className="muted">
-										Comments are for signed-in staff.
-									</span>
-									<button
-										type="button"
-										className="button small"
-										onClick={() => setCommentSignIn(true)}
-									>
+								<div className="watch__comment-gate">
+									<span>Comments are for signed-in staff.</span>
+									<Button size="sm" onClick={() => setCommentSignIn(true)}>
 										Sign in
-									</button>
+									</Button>
 								</div>
 							)}
-						</div>
+						</Card>
 					)}
 				</section>
 
-				<aside>
+				<aside className="watch__side">
 					{current.summary && (
-						<div className="card">
-							<h2>Summary</h2>
-							<p>{current.summary}</p>
-						</div>
+						<Card title="Summary" icon={<Icons.AlignLeft />}>
+							<p className="watch__summary">{current.summary}</p>
+						</Card>
 					)}
 					{current.chapters.length > 0 && (
-						<div className="card">
-							<h2>Chapters</h2>
+						<Card
+							title="Chapters"
+							icon={<Icons.List />}
+							className="card--flush"
+						>
 							<ul className="timeline">
 								{current.chapters.map((chapter) => (
 									<li key={`${chapter.start}-${chapter.title}`}>
-										<button type="button" onClick={() => seek(chapter.start)}>
-											<span className="time">
+										<button
+											type="button"
+											className="timeline__item"
+											onClick={() => seek(chapter.start)}
+										>
+											<span className="timeline__time">
 												{formatDuration(chapter.start)}
 											</span>
-											{chapter.title}
+											<span className="timeline__text timeline__text--strong">
+												{chapter.title}
+											</span>
 										</button>
 									</li>
 								))}
 							</ul>
-						</div>
+						</Card>
 					)}
-					<div className="card">
-						<h2>Transcript</h2>
+					<Card
+						title="Transcript"
+						icon={<Icons.FileText />}
+						className={current.transcript.length > 0 ? "card--flush" : ""}
+					>
 						{current.transcript.length > 0 ? (
-							<ul className="timeline transcript">
+							<ul className="timeline timeline--scroll">
 								{current.transcript.map((segment) => (
 									<li key={`${segment.start}-${segment.end}`}>
-										<button type="button" onClick={() => seek(segment.start)}>
-											<span className="time">
+										<button
+											type="button"
+											className="timeline__item"
+											onClick={() => seek(segment.start)}
+										>
+											<span className="timeline__time">
 												{formatDuration(segment.start)}
 											</span>
-											{segment.text}
+											<span className="timeline__text">{segment.text}</span>
 										</button>
 									</li>
 								))}
 							</ul>
 						) : (
-							<p className="muted">
+							<p className="watch__empty">
 								{current.transcriptStatus === "none"
 									? "No speech was found in this recording."
 									: current.transcriptStatus === "failed"
@@ -462,16 +525,18 @@ export function Watch() {
 						{current.isOwner &&
 							(current.transcriptStatus === "failed" ||
 								current.aiStatus === "failed") && (
-								<button
-									type="button"
-									className="button small"
-									disabled={retrying}
-									onClick={() => void retryProcessing()}
-								>
-									{retrying ? "Starting…" : "Try again"}
-								</button>
+								<div className="watch__retry">
+									<Button
+										size="sm"
+										startIcon={<Icons.Refresh size={14} />}
+										disabled={retrying}
+										onClick={() => void retryProcessing()}
+									>
+										{retrying ? "Starting…" : "Try again"}
+									</Button>
+								</div>
 							)}
-					</div>
+					</Card>
 				</aside>
 			</main>
 		</div>
@@ -488,7 +553,7 @@ function TitleEditor({
 	onSave: (title: string) => void;
 }) {
 	const [value, setValue] = useState(title);
-	if (!editable) return <h1 className="watch-title">{title}</h1>;
+	if (!editable) return <h1 className="watch__title">{title}</h1>;
 	const commit = () => {
 		const next = value.trim();
 		if (next && next !== title) onSave(next);
@@ -496,7 +561,8 @@ function TitleEditor({
 	};
 	return (
 		<input
-			className="watch-title editable"
+			className="watch__title watch__title--editable"
+			title="Click to rename"
 			value={value}
 			aria-label="Video title"
 			maxLength={200}
@@ -530,16 +596,16 @@ function TrimControl({
 	if (!editing)
 		return (
 			<div className="field">
-				Trim
-				<p className="muted small-text">
+				<span className="field__label">Trim</span>
+				<p className="field__hint">
 					{trimmed
 						? `Viewers see ${formatDuration(video.trimStart ?? 0)} to ${formatDuration(video.trimEnd ?? video.durationSeconds)}. The rest is hidden, not deleted.`
 						: "Hide the start or the end of this video from viewers."}
 				</p>
-				<div className="row">
-					<button
-						type="button"
-						className="button small"
+				<div className="field__row">
+					<Button
+						size="sm"
+						startIcon={<Icons.Scissors size={14} />}
 						onClick={() => {
 							setStart(video.trimStart);
 							setEnd(video.trimEnd);
@@ -547,61 +613,53 @@ function TrimControl({
 						}}
 					>
 						{trimmed ? "Change trim" : "Trim"}
-					</button>
+					</Button>
 					{trimmed && (
-						<button
-							type="button"
-							className="button ghost small"
+						<Button
+							variant="ghost"
+							size="sm"
 							onClick={() => onSave({ start: null, end: null })}
 						>
 							Remove trim
-						</button>
+						</Button>
 					)}
 				</div>
 			</div>
 		);
 
 	return (
-		<div className="field">
-			Trim
-			<p className="muted small-text">
+		<div className="field field--editing">
+			<span className="field__label">Trim</span>
+			<p className="field__hint">
 				Play or drag the video to the moment you want, then press a button.
 			</p>
-			<div className="row">
-				<button
-					type="button"
-					className="button small"
-					onClick={() => setStart(mark())}
-				>
+			<div className="field__row">
+				<Button size="sm" onClick={() => setStart(mark())}>
 					Start here
-				</button>
-				<button
-					type="button"
-					className="button small"
-					onClick={() => setEnd(mark())}
-				>
+				</Button>
+				<Button size="sm" onClick={() => setEnd(mark())}>
 					End here
-				</button>
+				</Button>
 			</div>
-			<p className="small-text">
+			<p className="field__value">
 				Starts at {formatDuration(start ?? 0)} · Ends at{" "}
 				{formatDuration(end ?? video.durationSeconds)}
 			</p>
-			<div className="row">
-				<button
-					type="button"
-					className="button primary small"
+			<div className="field__row">
+				<Button
+					variant="primary"
+					size="sm"
 					onClick={() => onSave({ start, end })}
 				>
 					Save trim
-				</button>
-				<button
-					type="button"
-					className="button ghost small"
+				</Button>
+				<Button
+					variant="ghost"
+					size="sm"
 					onClick={() => onEditingChange(false)}
 				>
 					Cancel
-				</button>
+				</Button>
 			</div>
 		</div>
 	);
@@ -617,18 +675,20 @@ function PasswordControl({
 	const [value, setValue] = useState("");
 	return (
 		<div className="field">
-			Password {hasPassword ? "(set)" : "(none)"}
-			<div className="row">
+			<span className="field__label">
+				Password
+				<StatusBadge>{hasPassword ? "Set" : "None"}</StatusBadge>
+			</span>
+			<div className="field__row">
 				<input
+					className="form-input"
 					type="password"
 					placeholder={hasPassword ? "New password" : "Add a password"}
 					aria-label="Video password"
 					value={value}
 					onChange={(event) => setValue(event.target.value)}
 				/>
-				<button
-					type="button"
-					className="button small"
+				<Button
 					disabled={value.length < 4}
 					onClick={() => {
 						onSave(value);
@@ -636,15 +696,11 @@ function PasswordControl({
 					}}
 				>
 					Save
-				</button>
+				</Button>
 				{hasPassword && (
-					<button
-						type="button"
-						className="button ghost small"
-						onClick={() => onSave(null)}
-					>
+					<Button variant="ghost" onClick={() => onSave(null)}>
 						Remove
-					</button>
+					</Button>
 				)}
 			</div>
 		</div>
