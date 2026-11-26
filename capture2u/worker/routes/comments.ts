@@ -7,7 +7,6 @@ import {
 import { requireUser } from "../auth";
 import { profileNames } from "../db";
 import type { AppBindings } from "../env";
-import { notifyComment } from "../lib/notify";
 import { isUuid } from "../lib/util";
 import { loadWatchable } from "./watch";
 
@@ -143,11 +142,10 @@ comments.post("/:videoId", async (c) => {
 		}
 	}
 
-	let parentAuthorId: string | null = null;
 	if (input.parentId) {
 		const { data: parent } = await db
 			.from("comments")
-			.select("id,video_id,author_id,parent_id,kind")
+			.select("id,video_id,parent_id,kind")
 			.eq("id", input.parentId)
 			.maybeSingle();
 		if (
@@ -157,7 +155,6 @@ comments.post("/:videoId", async (c) => {
 			parent.kind !== "text"
 		)
 			return c.json({ error: "invalid_comment" }, 400);
-		parentAuthorId = parent.author_id as string;
 	}
 
 	const { count, error: countError } = await db
@@ -182,13 +179,6 @@ comments.post("/:videoId", async (c) => {
 		throw new Error(`Could not save comment: ${error.message}`);
 	}
 
-	if (input.kind === "text")
-		c.executionCtx.waitUntil(
-			notifyComment(c.env, db, video, user, {
-				body: input.body,
-				parentAuthorId,
-			}).catch((cause) => console.error("[capture2u] comment email", cause)),
-		);
 	return c.json({ created: true });
 });
 

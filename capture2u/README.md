@@ -27,7 +27,7 @@ This folder is self-contained and is not part of the Cap monorepo's workspaces. 
 - **Trim:** hides the start or end from viewers (player, transcript, chapters, captions). The file is not cut, so the owner can undo it and the owner's download is the full recording.
 - **Embed:** `/embed/:id` is a bare player for iframes. The share page offers a copy-and-paste embed code and advertises oEmbed for open videos.
 - **Slack:** `/api/slack/events` answers Slack's link events with a playable video card for open videos. Locked videos keep the plain preview card.
-- **Notifications:** the owner is emailed on a new comment and on the first view. Anyone can switch these off at the bottom of My videos.
+- **Viewers:** the owner sees who watched on the video page: signed-in staff by name, plus a count of viewers who were not signed in. The only email the app sends is the sign-in code.
 - **Retention:** a nightly scheduled job deletes videos older than `RETENTION_DAYS` unless `keep` is set. It only deletes when `RETENTION_MODE` is exactly `delete`; otherwise it writes a report to `retention_runs`.
 
 ## Commands
@@ -60,7 +60,7 @@ Already created on the Locate Technologies accounts:
 - R2 bucket `capture2u-videos` (Oceania). Unfinished uploads are cleared after 7 days by a bucket rule. Do not add any rule that deletes objects; retention is done by the Worker so the Keep flag is respected.
 - Queue `capture2u-jobs`.
 
-- Email sending for `capture2u.locate2u.com` (Cloudflare Email Sending). Sign-in codes and notifications come from `no-reply@capture2u.locate2u.com`; set `EMAIL_FROM` to use another address on an onboarded domain.
+- Email sending for `capture2u.locate2u.com` (Cloudflare Email Sending). Sign-in codes come from `no-reply@capture2u.locate2u.com`; set `EMAIL_FROM` to use another address on an onboarded domain.
 - The app's address, `https://capture.locate2u.io`, attached to the Worker as a custom domain (`routes` in `wrangler.jsonc`). It also answers at `https://capture2u.steve-590.workers.dev`.
 
 The `SUPABASE_SERVICE_ROLE_KEY` secret is set on the Worker. Still to do by hand:
@@ -87,7 +87,7 @@ Only `SUPABASE_SERVICE_ROLE_KEY` is required. Everything else has a default or i
 | `SUMMARY_MODEL` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | Workers AI text model for title, summary and chapters. |
 | `PUBLIC_BASE_URL` | the address the request came in on | Only needed to force one address. |
 | `MEDIA_TOKEN_SECRET` | derived from the service key | Optional separate secret for signing playback links and sign-in codes. Changing it expires links and codes already issued. |
-| `EMAIL_FROM` | `no-reply@capture2u.locate2u.com` | Address sign-in codes and notifications come from. Its domain must be onboarded in Cloudflare Email Sending. |
+| `EMAIL_FROM` | `no-reply@capture2u.locate2u.com` | Address sign-in codes come from. Its domain must be onboarded in Cloudflare Email Sending. |
 | `SLACK_SIGNING_SECRET` | none (secret) | From the Slack app's Basic Information page. Needed for videos to play in Slack. |
 | `SLACK_BOT_TOKEN` | none (secret) | The Slack app's bot token (`xoxb-...`). Needed for videos to play in Slack. |
 

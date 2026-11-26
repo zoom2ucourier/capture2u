@@ -41,23 +41,6 @@ app.get("/api/config", (c) => {
 
 app.get("/api/me", requireUser, (c) => c.json({ user: c.get("user") }));
 
-app.patch("/api/me", requireUser, async (c) => {
-	const user = c.get("user");
-	const body = (await c.req.json().catch(() => ({}))) as {
-		emailNotifications?: unknown;
-	};
-	if (typeof body.emailNotifications !== "boolean")
-		return c.json({ error: "nothing_to_update" }, 400);
-	const { error } = await adminClient(c.env)
-		.from("profiles")
-		.update({ email_notifications: body.emailNotifications })
-		.eq("id", user.id);
-	if (error) throw new Error(`Could not save preference: ${error.message}`);
-	return c.json({
-		user: { ...user, emailNotifications: body.emailNotifications },
-	});
-});
-
 app.get("/api/oembed", async (c) => {
 	const id = sharedVideoId(c.req.query("url") ?? "", c.env.PUBLIC_BASE_URL);
 	const format = c.req.query("format");

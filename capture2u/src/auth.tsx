@@ -14,7 +14,6 @@ export interface CurrentUser {
 	email: string;
 	role: "member" | "admin";
 	fullName: string | null;
-	emailNotifications: boolean;
 }
 
 interface AuthState {
@@ -23,7 +22,6 @@ interface AuthState {
 	error: string | null;
 	requestCode: (email: string) => Promise<void>;
 	verifyCode: (email: string, code: string) => Promise<void>;
-	setEmailNotifications: (enabled: boolean) => Promise<void>;
 	signOut: () => Promise<void>;
 }
 
@@ -107,14 +105,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		if (sessionError) throw new Error("Could not sign you in. Try again.");
 	}, []);
 
-	const setEmailNotifications = useCallback(async (enabled: boolean) => {
-		const result = await api<{ user: CurrentUser }>("/api/me", {
-			method: "PATCH",
-			body: { emailNotifications: enabled },
-		});
-		setUser(result.user);
-	}, []);
-
 	const signOut = useCallback(async () => {
 		const supabase = await getSupabase();
 		await supabase.auth.signOut();
@@ -128,18 +118,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			error,
 			requestCode,
 			verifyCode,
-			setEmailNotifications,
 			signOut,
 		}),
-		[
-			loading,
-			user,
-			error,
-			requestCode,
-			verifyCode,
-			setEmailNotifications,
-			signOut,
-		],
+		[loading, user, error, requestCode, verifyCode, signOut],
 	);
 	return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

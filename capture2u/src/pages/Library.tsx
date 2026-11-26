@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Folder, LibraryVideo } from "../../shared/types";
-import { useAuth } from "../auth";
 import { Button, ButtonLink } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { Alert, EmptyState, LoadingState } from "../components/common/Feedback";
@@ -27,7 +26,6 @@ const countLabel = (count: number) =>
 	`${count} ${count === 1 ? "video" : "videos"}`;
 
 export function Library() {
-	const { user, setEmailNotifications } = useAuth();
 	const [videos, setVideos] = useState<LibraryVideo[] | null>(null);
 	const [folders, setFolders] = useState<Folder[]>([]);
 	const [folderId, setFolderId] = useState<string | null>(null);
@@ -409,21 +407,6 @@ export function Library() {
 					);
 				})}
 			</div>
-
-			{user && (
-				<label className="check library__preferences">
-					<input
-						type="checkbox"
-						checked={user.emailNotifications}
-						onChange={(event) =>
-							void setEmailNotifications(event.target.checked).catch(() =>
-								setError("Could not save that setting."),
-							)
-						}
-					/>
-					Email me when someone comments on or first watches my videos
-				</label>
-			)}
 		</div>
 	);
 }

@@ -61,6 +61,7 @@ export interface WatchVideo {
 	width: number | null;
 	height: number | null;
 	viewCount: number;
+	viewers: VideoViewers | null;
 	createdAt: string;
 	transcriptStatus: StageStatus;
 	aiStatus: StageStatus;
@@ -74,6 +75,17 @@ export interface WatchVideo {
 		captionsUrl: string | null;
 		downloadUrl: string | null;
 	} | null;
+}
+
+export interface VideoViewer {
+	name: string;
+	views: number;
+	lastViewedAt: string;
+}
+
+export interface VideoViewers {
+	people: VideoViewer[];
+	anonymous: number;
 }
 
 export type CommentKind = "text" | "emoji";

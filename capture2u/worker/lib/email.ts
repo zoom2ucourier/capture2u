@@ -25,12 +25,6 @@ const layout = (body: string, footer: string) =>
 	`<p style="font-weight:700;font-size:18px;color:#1C3E61;margin:0 0 16px;padding:0 0 12px;border-bottom:2px solid #2B93FF">Capture2u</p>${body}` +
 	`<p style="color:#737474;font-size:12px;margin:24px 0 0">${footer}</p></div></div>`;
 
-const button = (url: string, label: string) =>
-	`<p style="margin:20px 0"><a href="${escapeHtml(url)}" style="background:#2B93FF;color:#FFFFFF;text-decoration:none;font-weight:500;padding:10px 16px;border-radius:6px;display:inline-block">${escapeHtml(label)}</a></p>`;
-
-const NOTIFICATION_FOOTER =
-	"You can turn these emails off on the My videos page in Capture2u.";
-
 export function loginCodeEmail(
 	to: string,
 	code: string,
@@ -45,49 +39,6 @@ export function loginCodeEmail(
 				`<p style="font-size:32px;font-weight:700;letter-spacing:6px;color:#1C3E61;margin:0 0 8px">${escapeHtml(code)}</p>` +
 				`<p style="margin:0">It works for ${minutes} minutes.</p>`,
 			"If you did not ask for this code, you can ignore this email.",
-		),
-	};
-}
-
-export function commentEmail(input: {
-	to: string;
-	actorName: string;
-	videoTitle: string;
-	body: string;
-	url: string;
-	isReply: boolean;
-}): OutgoingEmail {
-	const action = input.isReply ? "replied to your comment on" : "commented on";
-	const excerpt =
-		input.body.length > 500 ? `${input.body.slice(0, 500)}…` : input.body;
-	return {
-		to: input.to,
-		subject: `${input.actorName} ${action} "${input.videoTitle}"`,
-		text: `${input.actorName} ${action} "${input.videoTitle}":\n\n${excerpt}\n\n${input.url}\n\n${NOTIFICATION_FOOTER}`,
-		html: layout(
-			`<p style="margin:0 0 12px"><strong>${escapeHtml(input.actorName)}</strong> ${action} <strong>${escapeHtml(input.videoTitle)}</strong>:</p>` +
-				`<p style="margin:0;padding:12px;background:#F4F7FB;border-radius:8px;white-space:pre-wrap">${escapeHtml(excerpt)}</p>` +
-				button(input.url, "Open the video"),
-			NOTIFICATION_FOOTER,
-		),
-	};
-}
-
-export function firstViewEmail(input: {
-	to: string;
-	viewerName: string | null;
-	videoTitle: string;
-	url: string;
-}): OutgoingEmail {
-	const who = input.viewerName ?? "Someone";
-	return {
-		to: input.to,
-		subject: `${who} watched "${input.videoTitle}"`,
-		text: `${who} just watched "${input.videoTitle}". This is its first view.\n\n${input.url}\n\n${NOTIFICATION_FOOTER}`,
-		html: layout(
-			`<p style="margin:0"><strong>${escapeHtml(who)}</strong> just watched <strong>${escapeHtml(input.videoTitle)}</strong>. This is its first view.</p>` +
-				button(input.url, "Open the video"),
-			NOTIFICATION_FOOTER,
 		),
 	};
 }

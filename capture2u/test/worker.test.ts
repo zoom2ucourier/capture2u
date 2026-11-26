@@ -179,7 +179,6 @@ describe("who can watch", () => {
 		email: "o@zoom2u.com",
 		role: "member",
 		fullName: null,
-		emailNotifications: true,
 	};
 	const colleague: SessionUser = { ...owner, id: "colleague" };
 	const admin: SessionUser = { ...owner, id: "admin", role: "admin" };

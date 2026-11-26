@@ -36,13 +36,12 @@ export interface VideoRow {
 	folder_id: string | null;
 	trim_start_seconds: number | null;
 	trim_end_seconds: number | null;
-	first_view_notified_at: string | null;
 	created_at: string;
 	updated_at: string;
 }
 
 export const VIDEO_COLUMNS =
-	"id,owner_id,title,title_edited,status,visibility,password_hash,keep,duration_seconds,width,height,size_bytes,mime_type,object_key,thumbnail_key,upload_id,transcript_status,transcript_text,transcript_segments,summary,chapters,ai_status,view_count,folder_id,trim_start_seconds,trim_end_seconds,first_view_notified_at,created_at,updated_at";
+	"id,owner_id,title,title_edited,status,visibility,password_hash,keep,duration_seconds,width,height,size_bytes,mime_type,object_key,thumbnail_key,upload_id,transcript_status,transcript_text,transcript_segments,summary,chapters,ai_status,view_count,folder_id,trim_start_seconds,trim_end_seconds,created_at,updated_at";
 
 export const adminClient = (env: Env): SupabaseClient => {
 	if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY)

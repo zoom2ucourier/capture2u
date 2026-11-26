@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LOGIN_CODE_LENGTH } from "../shared/types";
-import { commentEmail, loginCodeEmail } from "../worker/lib/email";
+import { loginCodeEmail } from "../worker/lib/email";
 import {
 	loginCodeHash,
 	newLoginCode,
@@ -69,21 +69,6 @@ describe("emails", () => {
 		expect(email.subject).toContain("004219");
 		expect(email.text).toContain("004219");
 		expect(email.html).toContain("004219");
-	});
-
-	it("escapes what people type before it goes into an email", () => {
-		const email = commentEmail({
-			to: "a@zoom2u.com",
-			actorName: "<b>Sam</b>",
-			videoTitle: 'Demo "one"',
-			body: "<script>alert(1)</script>",
-			url: "https://capture2u.example.com/v/abc12345",
-			isReply: false,
-		});
-		expect(email.html).not.toContain("<script>");
-		expect(email.html).not.toContain("<b>Sam</b>");
-		expect(email.html).toContain("&lt;script&gt;");
-		expect(email.text).toContain("<script>alert(1)</script>");
 	});
 });
 

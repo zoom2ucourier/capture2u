@@ -37,7 +37,6 @@ export interface SessionUser {
 	email: string;
 	role: "member" | "admin";
 	fullName: string | null;
-	emailNotifications: boolean;
 }
 
 export type AppBindings = {

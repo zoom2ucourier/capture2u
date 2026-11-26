@@ -36,7 +36,7 @@ export async function resolveUser(
 
 	const { data: profile } = await db
 		.from("profiles")
-		.select("id,role,full_name,email_notifications")
+		.select("id,role,full_name")
 		.eq("id", authUser.id)
 		.maybeSingle();
 
@@ -59,7 +59,6 @@ export async function resolveUser(
 			email,
 			role: profile?.role === "admin" ? "admin" : "member",
 			fullName: (profile?.full_name as string | null) ?? fullName,
-			emailNotifications: profile?.email_notifications !== false,
 		},
 	};
 }

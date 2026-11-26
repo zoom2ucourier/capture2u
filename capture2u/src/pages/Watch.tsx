@@ -452,6 +452,45 @@ export function Watch() {
 				</section>
 
 				<aside className="watch__side">
+					{current.viewers && (
+						<Card
+							title="Viewers"
+							icon={<Icons.Users />}
+							actions={<span className="chip__count">{current.viewCount}</span>}
+						>
+							{current.viewers.people.length === 0 &&
+								current.viewers.anonymous === 0 && (
+									<p className="viewers__empty">
+										No one has watched this video yet.
+									</p>
+								)}
+							<ul className="viewers">
+								{current.viewers.people.map((viewer) => (
+									<li
+										key={`${viewer.name}-${viewer.lastViewedAt}`}
+										className="viewers__item"
+									>
+										<Avatar name={viewer.name} size="sm" />
+										<div className="viewers__text">
+											<p className="viewers__name">{viewer.name}</p>
+											<p className="viewers__details">
+												Last watched {formatDate(viewer.lastViewedAt)}
+												{viewer.views > 1 && ` · ${viewer.views} views`}
+											</p>
+										</div>
+									</li>
+								))}
+								{current.viewers.anonymous > 0 && (
+									<li className="viewers__item viewers__item--anonymous">
+										<Icons.Globe size={16} />
+										{current.viewers.anonymous === 1
+											? "1 person who was not signed in"
+											: `${current.viewers.anonymous} people who were not signed in`}
+									</li>
+								)}
+							</ul>
+						</Card>
+					)}
 					{current.summary && (
 						<Card title="Summary" icon={<Icons.AlignLeft />}>
 							<p className="watch__summary">{current.summary}</p>

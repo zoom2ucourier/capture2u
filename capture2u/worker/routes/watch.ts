@@ -1,10 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Hono } from "hono";
-import type { WatchVideo } from "../../shared/types";
+import type { VideoViewers, WatchVideo } from "../../shared/types";
 import { resolveUser } from "../auth";
 import { adminClient, getVideo, type VideoRow, videoTrim } from "../db";
 import type { AppBindings, Env, SessionUser } from "../env";
-import { notifyFirstView } from "../lib/notify";
 import { verifyPassword } from "../lib/password";
 import { createToken, sha256Hex, verifyToken } from "../lib/tokens";
 import {
@@ -94,6 +93,65 @@ export async function loadWatchable(
 	return { ok: true, db, video, viewer, isOwner: access.isOwner };
 }
 
+const MAX_VIEW_ROWS = 2000;
+
+async function loadViewers(
+	db: SupabaseClient,
+	videoId: string,
+): Promise<VideoViewers> {
+	const { data, error } = await db
+		.from("video_views")
+		.select("viewer_key,viewer_id,created_at")
+		.eq("video_id", videoId)
+		.order("created_at", { ascending: false })
+		.limit(MAX_VIEW_ROWS);
+	if (error) throw new Error(`Could not load viewers: ${error.message}`);
+
+	const people = new Map<string, { views: number; lastViewedAt: string }>();
+	const anonymous = new Set<string>();
+	for (const row of data ?? []) {
+		const viewerId = row.viewer_id as string | null;
+		if (!viewerId) {
+			anonymous.add(row.viewer_key as string);
+			continue;
+		}
+		const seen = people.get(viewerId);
+		if (seen) seen.views += 1;
+		else
+			people.set(viewerId, {
+				views: 1,
+				lastViewedAt: row.created_at as string,
+			});
+	}
+
+	const names = new Map<string, string>();
+	if (people.size > 0) {
+		const { data: profiles, error: profileError } = await db
+			.from("profiles")
+			.select("id,full_name,email")
+			.in("id", [...people.keys()]);
+		if (profileError)
+			throw new Error(`Could not load viewers: ${profileError.message}`);
+		for (const profile of profiles ?? [])
+			names.set(
+				profile.id as string,
+				displayName(
+					profile.full_name as string | null,
+					profile.email as string | null,
+				),
+			);
+	}
+
+	return {
+		people: [...people].map(([id, seen]) => ({
+			name: names.get(id) ?? "Unknown",
+			views: seen.views,
+			lastViewedAt: seen.lastViewedAt,
+		})),
+		anonymous: anonymous.size,
+	};
+}
+
 export const watch = new Hono<AppBindings>();
 
 watch.get("/:id", async (c) => {
@@ -156,6 +214,7 @@ watch.get("/:id", async (c) => {
 		width: video.width,
 		height: video.height,
 		viewCount: video.view_count,
+		viewers: isOwner ? await loadViewers(db, video.id) : null,
 		createdAt: video.created_at,
 		transcriptStatus: video.transcript_status,
 		aiStatus: video.ai_status,
@@ -238,12 +297,5 @@ watch.post("/:id/view", async (c) => {
 		p_viewer_id: viewer?.id ?? null,
 	});
 	if (error) throw new Error(`Could not record view: ${error.message}`);
-
-	if (data === true && video.first_view_notified_at === null)
-		c.executionCtx.waitUntil(
-			notifyFirstView(c.env, db, video, viewer).catch((cause) =>
-				console.error("[capture2u] first view email", cause),
-			),
-		);
 	return c.json({ counted: data === true });
 });
