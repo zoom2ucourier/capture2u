@@ -1,10 +1,18 @@
 import type { DetectedDisplayRecordingMode } from "@cap/recorder-core/recorder-constants";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button, ButtonAnchor, ButtonLink } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { Alert } from "../components/common/Feedback";
 import { Icons } from "../components/common/Icons";
+import {
+	FloatingControls,
+	RecordingControls,
+	RecordingDot,
+	StreamVideo,
+} from "../components/RecordingControls";
 import { formatDuration } from "../lib/api";
+import { useFloatingWindow } from "../recorder/useFloatingWindow";
 import { useRecorder } from "../recorder/useRecorder";
 
 const MODES: {
@@ -18,9 +26,13 @@ const MODES: {
 ];
 
 const NO_MICROPHONE = "__none__";
+const FLOATING_BAR_HEIGHT = 68;
+const FLOATING_WIDTH = 380;
+const FLOATING_CAMERA_HEIGHT = 285;
 
 export function RecordPage() {
 	const recorder = useRecorder();
+	const floating = useFloatingWindow();
 	const [mode, setMode] = useState<DetectedDisplayRecordingMode>("fullscreen");
 	const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([]);
 	const [microphoneId, setMicrophoneId] = useState("");
@@ -29,6 +41,7 @@ export function RecordPage() {
 	const [cameraError, setCameraError] = useState<string | null>(null);
 	const [copied, setCopied] = useState(false);
 	const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
+	const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
 	const cameraStreamRef = useRef<MediaStream | null>(null);
 
 	useEffect(() => {
@@ -57,6 +70,7 @@ export function RecordPage() {
 			for (const track of cameraStreamRef.current?.getTracks() ?? [])
 				track.stop();
 			cameraStreamRef.current = null;
+			setCameraStream(null);
 			if (document.pictureInPictureElement)
 				void document.exitPictureInPicture().catch(() => undefined);
 			return;
@@ -70,7 +84,7 @@ export function RecordPage() {
 					return;
 				}
 				cameraStreamRef.current = stream;
-				if (cameraVideoRef.current) cameraVideoRef.current.srcObject = stream;
+				setCameraStream(stream);
 				setCameraError(null);
 			})
 			.catch(() => {
@@ -114,6 +128,29 @@ export function RecordPage() {
 
 	const busy = recorder.phase !== "idle" && recorder.phase !== "error";
 	const isLive = recorder.phase === "recording" || recorder.phase === "paused";
+	const wantsFloating = recorder.phase === "starting" || isLive;
+	const { open: openFloating, close: closeFloating } = floating;
+
+	const phase = recorder.phase;
+	useEffect(() => {
+		if (phase !== "starting" && phase !== "recording" && phase !== "paused")
+			closeFloating();
+	}, [phase, closeFloating]);
+
+	const showFloating = () =>
+		void openFloating({
+			width: FLOATING_WIDTH,
+			height: FLOATING_BAR_HEIGHT + (cameraStream ? FLOATING_CAMERA_HEIGHT : 0),
+		});
+
+	const startRecording = () => {
+		void recorder.start({
+			mode,
+			microphoneId: microphoneId === NO_MICROPHONE ? null : microphoneId,
+			systemAudio,
+		});
+		showFloating();
+	};
 
 	const copyLink = async () => {
 		if (!recorder.share) return;
@@ -203,26 +240,32 @@ export function RecordPage() {
 					</label>
 					{cameraOn && (
 						<div className="record__camera">
-							<video
-								ref={cameraVideoRef}
+							<StreamVideo
+								stream={cameraStream}
+								videoRef={cameraVideoRef}
 								className="record__camera-preview"
-								autoPlay
-								muted
-								playsInline
 							/>
-							<div>
-								<Button
-									size="sm"
-									startIcon={<Icons.PictureInPicture size={14} />}
-									onClick={() => void floatCamera()}
-								>
-									Float camera over my screen
-								</Button>
+							{floating.supported ? (
 								<p className="field__hint">
-									The floating camera appears in the video when you record your
-									entire screen.
+									Your camera floats above your other windows with the recording
+									controls. It appears in the video when you record your entire
+									screen.
 								</p>
-							</div>
+							) : (
+								<div>
+									<Button
+										size="sm"
+										startIcon={<Icons.PictureInPicture size={14} />}
+										onClick={() => void floatCamera()}
+									>
+										Float camera over my screen
+									</Button>
+									<p className="field__hint">
+										The floating camera appears in the video when you record
+										your entire screen.
+									</p>
+								</div>
+							)}
 						</div>
 					)}
 					{cameraError && <Alert>{cameraError}</Alert>}
@@ -233,14 +276,7 @@ export function RecordPage() {
 							variant="primary"
 							size="lg"
 							startIcon={<Icons.Record size={18} />}
-							onClick={() =>
-								void recorder.start({
-									mode,
-									microphoneId:
-										microphoneId === NO_MICROPHONE ? null : microphoneId,
-									systemAudio,
-								})
-							}
+							onClick={startRecording}
 						>
 							Start recording
 						</Button>
@@ -280,13 +316,7 @@ export function RecordPage() {
 			{isLive && (
 				<div className="card record__live">
 					<p className="record__timer">
-						<span
-							className={
-								recorder.phase === "recording"
-									? "record__dot record__dot--recording"
-									: "record__dot"
-							}
-						/>
+						<RecordingDot recording={recorder.phase === "recording"} />
 						{formatDuration(recorder.elapsedSeconds)}
 					</p>
 					<p className="record__phase">
@@ -295,39 +325,32 @@ export function RecordPage() {
 					{recorder.notice && (
 						<p className="record__notice">{recorder.notice}</p>
 					)}
-					<div className="record__actions record__actions--centered">
-						{recorder.phase === "recording" ? (
-							<Button
-								size="lg"
-								startIcon={<Icons.Pause />}
-								onClick={recorder.pause}
-							>
-								Pause
-							</Button>
-						) : (
-							<Button
-								size="lg"
-								startIcon={<Icons.Play />}
-								onClick={recorder.resume}
-							>
-								Resume
-							</Button>
-						)}
+					<RecordingControls recorder={recorder} />
+					{floating.supported && !floating.floatingWindow ? (
 						<Button
-							variant="primary"
-							size="lg"
-							startIcon={<Icons.Square />}
-							onClick={recorder.stop}
+							variant="ghost"
+							size="sm"
+							startIcon={<Icons.PictureInPicture size={14} />}
+							onClick={showFloating}
 						>
-							Stop and share
+							Show floating controls
 						</Button>
-					</div>
-					<p className="field__hint">
-						Keep this tab open while you record. You can switch to other
-						windows.
-					</p>
+					) : (
+						<p className="field__hint">
+							{floating.floatingWindow
+								? "The floating controls stay on top of your other windows. Keep this tab open while you record."
+								: "Keep this tab open while you record. You can switch to other windows."}
+						</p>
+					)}
 				</div>
 			)}
+
+			{floating.floatingWindow &&
+				wantsFloating &&
+				createPortal(
+					<FloatingControls recorder={recorder} cameraStream={cameraStream} />,
+					floating.floatingWindow.document.body,
+				)}
 
 			{(recorder.phase === "finishing" ||
 				recorder.phase === "uploading" ||

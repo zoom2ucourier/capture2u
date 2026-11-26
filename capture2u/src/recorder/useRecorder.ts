@@ -58,7 +58,7 @@ export function useRecorder() {
 	const [finished, setFinished] = useState<FinishedRecording | null>(null);
 
 	const recorderRef = useRef<MediaRecorder | null>(null);
-	const chunksRef = useRef<Blob[]>([]);
+	const recordingStreamRef = useRef<MediaStream | null>(null);
 	const streamsRef = useRef<MediaStream[]>([]);
 	const mixerRef = useRef<AudioMixer | null>(null);
 	const formatRef = useRef<RecordingFormat | null>(null);
@@ -98,6 +98,7 @@ export function useRecorder() {
 		for (const stream of streamsRef.current)
 			for (const track of stream.getTracks()) track.stop();
 		streamsRef.current = [];
+		recordingStreamRef.current = null;
 		const mixer = mixerRef.current;
 		mixerRef.current = null;
 		if (mixer) await mixer.close();
@@ -173,43 +174,45 @@ export function useRecorder() {
 		}
 	}, []);
 
-	const finalize = useCallback(async () => {
-		const format = formatRef.current;
-		const durationSeconds = Math.max(1, readElapsedMs() / 1000);
-		stopTimer();
-		await releaseCapture();
-		if (!format) return;
+	const finalize = useCallback(
+		async (chunks: Blob[]) => {
+			const format = formatRef.current;
+			const durationSeconds = Math.max(1, readElapsedMs() / 1000);
+			stopTimer();
+			await releaseCapture();
+			if (!format) return;
 
-		const raw = new Blob(chunksRef.current, {
-			type: format.mimeType.split(";")[0],
-		});
-		chunksRef.current = [];
-		if (raw.size === 0) {
-			setError("Nothing was recorded.");
-			setPhase("error");
-			return;
-		}
-
-		setPhase("finishing");
-		let blob = raw;
-		if (format.extension === "mp4") {
-			try {
-				blob = await toSeekableMp4(raw);
-			} catch (cause) {
-				console.warn("Keeping the original recording", cause);
+			const raw = new Blob(chunks, {
+				type: format.mimeType.split(";")[0],
+			});
+			if (raw.size === 0) {
+				setError("Nothing was recorded.");
+				setPhase("error");
+				return;
 			}
-		}
 
-		const recording: FinishedRecording = {
-			blob,
-			fileName: `capture2u-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.${format.extension}`,
-			durationSeconds,
-			...dimensionsRef.current,
-			format,
-		};
-		setFinished(recording);
-		await upload(recording);
-	}, [readElapsedMs, releaseCapture, stopTimer, upload]);
+			setPhase("finishing");
+			let blob = raw;
+			if (format.extension === "mp4") {
+				try {
+					blob = await toSeekableMp4(raw);
+				} catch (cause) {
+					console.warn("Keeping the original recording", cause);
+				}
+			}
+
+			const recording: FinishedRecording = {
+				blob,
+				fileName: `capture2u-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.${format.extension}`,
+				durationSeconds,
+				...dimensionsRef.current,
+				format,
+			};
+			setFinished(recording);
+			await upload(recording);
+		},
+		[readElapsedMs, releaseCapture, stopTimer, upload],
+	);
 
 	const stop = useCallback(() => {
 		const recorder = recorderRef.current;
@@ -221,6 +224,37 @@ export function useRecorder() {
 		}
 		if (recorder.state !== "inactive") recorder.stop();
 	}, [readElapsedMs]);
+
+	const beginRecorder = useCallback(() => {
+		const stream = recordingStreamRef.current;
+		const format = formatRef.current;
+		if (!stream || !format) throw new Error("Nothing to record");
+		const chunks: Blob[] = [];
+		const recorder = new MediaRecorder(stream, {
+			mimeType: format.mimeType,
+			videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
+			audioBitsPerSecond: AUDIO_BITS_PER_SECOND,
+		});
+		recorder.ondataavailable = (event) => {
+			if (event.data.size > 0) chunks.push(event.data);
+		};
+		recorder.onstop = () => {
+			if (recorderRef.current === recorder) void finalize(chunks);
+		};
+		recorder.onerror = () => {
+			if (recorderRef.current !== recorder) return;
+			setError("Recording stopped unexpectedly.");
+			stop();
+		};
+		recorderRef.current = recorder;
+		stoppingRef.current = false;
+		stopTimer();
+		timerRef.current = { startedAt: 0, accumulatedMs: 0, interval: null };
+		recorder.start(1000);
+		startTimer();
+		setElapsedSeconds(0);
+		setPhase("recording");
+	}, [finalize, startTimer, stop, stopTimer]);
 
 	const start = useCallback(
 		async (options: RecorderOptions) => {
@@ -284,26 +318,9 @@ export function useRecorder() {
 					height: settings.height,
 				};
 
-				const recorder = new MediaRecorder(new MediaStream(tracks), {
-					mimeType: format.mimeType,
-					videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
-					audioBitsPerSecond: AUDIO_BITS_PER_SECOND,
-				});
-				recorderRef.current = recorder;
-				chunksRef.current = [];
-				recorder.ondataavailable = (event) => {
-					if (event.data.size > 0) chunksRef.current.push(event.data);
-				};
-				recorder.onstop = () => void finalize();
-				recorder.onerror = () => {
-					setError("Recording stopped unexpectedly.");
-					stop();
-				};
+				recordingStreamRef.current = new MediaStream(tracks);
 				videoTrack.addEventListener("ended", stop, { once: true });
-
-				recorder.start(1000);
-				startTimer();
-				setPhase("recording");
+				beginRecorder();
 			} catch (cause) {
 				await releaseCapture();
 				if (isUserCancellationError(cause)) {
@@ -314,7 +331,7 @@ export function useRecorder() {
 				setPhase("error");
 			}
 		},
-		[finalize, releaseCapture, startTimer, stop],
+		[beginRecorder, releaseCapture, stop],
 	);
 
 	const pause = useCallback(() => {
@@ -334,6 +351,34 @@ export function useRecorder() {
 		startTimer();
 		setPhase("recording");
 	}, [startTimer]);
+
+	const discard = useCallback(() => {
+		const recorder = recorderRef.current;
+		recorderRef.current = null;
+		if (recorder && recorder.state !== "inactive") recorder.stop();
+		stopTimer();
+		timerRef.current = { startedAt: 0, accumulatedMs: 0, interval: null };
+		void releaseCapture();
+		setElapsedSeconds(0);
+		setNotice(null);
+		setError(null);
+		setPhase("idle");
+	}, [releaseCapture, stopTimer]);
+
+	const restart = useCallback(() => {
+		const recorder = recorderRef.current;
+		if (!recorder || recorder.state === "inactive" || stoppingRef.current)
+			return;
+		recorderRef.current = null;
+		recorder.stop();
+		try {
+			beginRecorder();
+		} catch {
+			discard();
+			setError("Could not restart the recording. Please start again.");
+			setPhase("error");
+		}
+	}, [beginRecorder, discard]);
 
 	const retryUpload = useCallback(() => {
 		if (finished) void upload(finished);
@@ -361,6 +406,8 @@ export function useRecorder() {
 		stop,
 		pause,
 		resume,
+		restart,
+		discard,
 		retryUpload,
 		reset,
 	};
