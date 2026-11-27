@@ -12,7 +12,7 @@ const camera: CameraDevice = {
 };
 
 const settings: ExtensionSettings = {
-	apiBaseUrl: "https://capture.locate2u.com",
+	apiBaseUrl: "https://capture.zoom2u.com",
 	capture: {
 		recordingMode: "fullscreen",
 		camera: null,

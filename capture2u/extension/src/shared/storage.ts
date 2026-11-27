@@ -27,10 +27,13 @@ export const MEDIA_ACCESS_KEY = "capture2u-media-access";
 export const FAILED_RECORDINGS_KEY = "capture2u-failed-recordings";
 const OVERLAY_TOKENS_KEY = "capture2u-overlay-tokens";
 const LAST_WEBCAM_PREVIEW_FRAME_KEY = "capture2u-last-webcam-preview-frame";
-export const DEFAULT_API_BASE_URL = "https://capture.locate2u.com";
-// Where the app lived before it moved. An install that saved this address
+export const DEFAULT_API_BASE_URL = "https://capture.zoom2u.com";
+// Where the app lived before it moved. An install that saved one of these
 // follows the move; any other saved address was typed in on purpose.
-const RETIRED_API_BASE_URL = "https://capture.locate2u.io";
+const RETIRED_API_BASE_URLS = new Set([
+	"https://capture.locate2u.io",
+	"https://capture.locate2u.com",
+]);
 
 export type MediaAccessState = {
 	camera: boolean;
@@ -172,10 +175,9 @@ export const loadSettings = async () => {
 	return {
 		...defaultSettings,
 		...saved,
-		apiBaseUrl:
-			saved.apiBaseUrl === RETIRED_API_BASE_URL
-				? DEFAULT_API_BASE_URL
-				: saved.apiBaseUrl,
+		apiBaseUrl: RETIRED_API_BASE_URLS.has(saved.apiBaseUrl)
+			? DEFAULT_API_BASE_URL
+			: saved.apiBaseUrl,
 		capture: normalizeCapturePreferences(saved.capture),
 		webcam: normalizeWebcamSettings(saved.webcam),
 		microphone: normalizeMicrophoneSettings(saved.microphone),

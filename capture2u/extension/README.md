@@ -10,7 +10,7 @@ This is a derived work of the Chrome extension in [Cap](https://github.com/CapSo
 
 What changed from Cap's extension:
 
-- It talks to the Capture2u Worker (`https://capture.locate2u.com`) instead of Cap.
+- It talks to the Capture2u Worker (`https://capture.zoom2u.com`) instead of Cap.
 - Capture2u name, icon and Locate2u colours. No Cap fonts are shipped; the UI uses the system font stack.
 - No plans, organisations, upgrade prompts, welcome page or store listing. Every signed-in user is unlimited.
 - It records MP4 (H.264 + AAC) first and WebM only as a fallback, because Capture2u has no transcoder.

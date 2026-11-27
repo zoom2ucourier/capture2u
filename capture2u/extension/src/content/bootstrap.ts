@@ -38,8 +38,8 @@ const isCapture2uWebOrigin = () => {
 	if (protocol !== "http:" && protocol !== "https:") return false;
 
 	return (
-		hostname === "capture.locate2u.com" ||
-		hostname === "capture.locate2u.io" ||
+		hostname === "capture.zoom2u.com" ||
+		hostname === "capture2u.steve-590.workers.dev" ||
 		hostname === "localhost" ||
 		hostname === "127.0.0.1" ||
 		hostname === "::1"
