@@ -207,6 +207,37 @@ describe("pauses and filler words", () => {
 		]);
 	});
 
+	it("reads a Deepgram transcript with punctuated words", () => {
+		const transcript = normalizeTranscript(
+			{
+				results: {
+					channels: [
+						{
+							alternatives: [
+								{
+									transcript: "Hello there.",
+									words: [
+										{ word: "hello", punctuated_word: "Hello", start: 0.1, end: 0.5 },
+										{ word: "there", punctuated_word: "there.", start: 0.6, end: 1.1 },
+									],
+								},
+							],
+						},
+					],
+				},
+			},
+			{ timesInMilliseconds: false },
+		);
+		expect(transcript.text).toBe("Hello there.");
+		expect(transcript.words).toEqual([
+			{ text: "Hello", start: 0.1, end: 0.5 },
+			{ text: "there.", start: 0.6, end: 1.1 },
+		]);
+		expect(transcript.segments).toEqual([
+			{ start: 0.1, end: 1.1, text: "Hello there." },
+		]);
+	});
+
 	it("reads word timings nested inside Whisper segments", () => {
 		const transcript = normalizeTranscript(
 			{

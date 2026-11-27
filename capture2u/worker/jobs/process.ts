@@ -15,6 +15,7 @@ type Transcript = Pick<
 
 const MEDIA_FETCH_TOKEN_TTL_SECONDS = 2 * 60 * 60;
 const FALLBACK_TRANSCRIBE_MODEL = "@cf/openai/whisper-large-v3-turbo";
+const STREAMING_TRANSCRIBE_MODEL = "@cf/deepgram/nova-3";
 const WHISPER_MAX_BYTES = 24 * 1024 * 1024;
 const PROMPT_TRANSCRIPT_CHARS = 24_000;
 const MIN_TRANSCRIPT_CHARS_FOR_AI = 40;
@@ -37,6 +38,24 @@ const toBase64 = (bytes: ArrayBuffer) => {
 
 async function transcribeWith(env: Env, video: VideoRow, model: string) {
 	if (!video.object_key) throw new Error("Video has no stored file");
+
+	if (model.startsWith("@cf/deepgram/")) {
+		const object = await env.VIDEOS.get(video.object_key);
+		if (!object) throw new Error("Stored file is missing");
+		const raw = await runModel(env, model, {
+			audio: {
+				body: object.body,
+				contentType: object.httpMetadata?.contentType ?? "video/mp4",
+			},
+			punctuate: true,
+			smart_format: true,
+			filler_words: true,
+		});
+		return normalizeTranscript(raw, {
+			timesInMilliseconds: false,
+			durationSeconds: video.duration_seconds,
+		});
+	}
 
 	// Whisper on Workers AI takes the file inline, so it only suits recordings
 	// small enough to hold in memory. URL-based models read the file from this
@@ -87,17 +106,28 @@ async function runUrlModel(env: Env, model: string, audioUrl: string) {
 	return runModel(env, model, { audio_url: audioUrl });
 }
 
+// The built-in Whisper model takes the file inline, so a long recording goes
+// to Deepgram, which reads the stored file as a stream. Both are billed as
+// Workers AI usage, so they still work when the paid provider has no credit.
 async function transcribe(env: Env, video: VideoRow) {
 	try {
 		return await transcribeWith(env, video, env.TRANSCRIBE_MODEL);
 	} catch (error) {
-		if (env.TRANSCRIBE_MODEL === FALLBACK_TRANSCRIBE_MODEL) throw error;
+		const head = video.object_key
+			? await env.VIDEOS.head(video.object_key)
+			: null;
+		const fallback =
+			head && head.size > WHISPER_MAX_BYTES
+				? STREAMING_TRANSCRIBE_MODEL
+				: FALLBACK_TRANSCRIBE_MODEL;
+		if (env.TRANSCRIBE_MODEL === fallback) throw error;
 		console.error(
-			"[capture2u] speech model failed, trying the built-in one",
+			"[capture2u] speech model failed, trying",
+			fallback,
 			video.id,
 			error,
 		);
-		return transcribeWith(env, video, FALLBACK_TRANSCRIBE_MODEL);
+		return transcribeWith(env, video, fallback);
 	}
 }
 

@@ -123,24 +123,42 @@ function readWords(entries: unknown, scale: number): TimedWord[] {
 		const text =
 			typeof item?.text === "string"
 				? item.text
-				: typeof item?.word === "string"
-					? item.word
-					: "";
+				: typeof item?.punctuated_word === "string"
+					? item.punctuated_word
+					: typeof item?.word === "string"
+						? item.word
+						: "";
 		if (start === null || end === null || end < start || !text.trim()) continue;
 		words.push({ text: text.trim(), start: start * scale, end: end * scale });
 	}
 	return words;
 }
 
+function deepgramAlternative(
+	body: Record<string, unknown>,
+): Record<string, unknown> | null {
+	const results = asRecord(body.results);
+	const channel = Array.isArray(results?.channels)
+		? asRecord(results.channels[0])
+		: null;
+	const alternative = Array.isArray(channel?.alternatives)
+		? asRecord(channel.alternatives[0])
+		: null;
+	if (!alternative) return null;
+	return { text: alternative.transcript, words: alternative.words };
+}
+
 // Speech models return different shapes: Whisper gives `segments` in seconds,
-// AssemblyAI gives `words` in milliseconds. Anything else falls back to one
-// untimed block so a transcript is never lost to a shape change.
+// AssemblyAI gives `words` in milliseconds, Deepgram nests `words` in seconds
+// under results.channels. Anything else falls back to one untimed block so a
+// transcript is never lost to a shape change.
 export function normalizeTranscript(
 	raw: unknown,
 	options: { timesInMilliseconds: boolean; durationSeconds?: number | null },
 ): { text: string; segments: TranscriptSegment[]; words: TimedWord[] } {
 	const root = asRecord(raw) ?? {};
-	const body = asRecord(root.result) ?? asRecord(root.response) ?? root;
+	const outer = asRecord(root.result) ?? asRecord(root.response) ?? root;
+	const body = deepgramAlternative(outer) ?? outer;
 	const scale = options.timesInMilliseconds ? 1 / 1000 : 1;
 
 	const rawSegments = Array.isArray(body.segments) ? body.segments : null;
