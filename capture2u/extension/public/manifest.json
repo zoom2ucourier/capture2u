@@ -3,7 +3,7 @@
 	"name": "Capture2u",
 	"short_name": "Capture2u",
 	"description": "Record your screen and share a link. For Locate2u staff.",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAt01KgO1E9NpY1jJ+WhAz+3S/ZCJB/ap06viCue34JGb/sZZ1sMj0ixXT/PYoFOb+IabxXpCsKS2rjnNXHvEVFwaw9tE5x2G6Hu4cjvn572C0xc0VpWQvO8VjGw/XjbAIYJdxbQ1y3PhCg61gQD/eja1+rmuFQ4ecOBUdIO2qb0nec9YuPfKssVaJdskOLpJ1iIa+arpyGIIwjhoQETCkcE5wuUF64im48/NTIE1jwpalEOE+OHFrx//sd2pL8I6qdOQ2LrXiRLS8gg3zvs9NqNszvnb7GW2CYR2l1skvchtMLd7lyZ71bNFlV8DFN36trdsp2IaJ12vt/b8UuRuBrQIDAQAB",
 	"homepage_url": "https://capture.locate2u.com/",
 	"minimum_chrome_version": "116",

@@ -24,6 +24,8 @@ const ExtensionApiPaths = {
 	updateInstantRecordingProgress: "/instant-recordings/progress",
 	deleteInstantRecording: (videoId: string) =>
 		`/instant-recordings/${encodeURIComponent(videoId)}` as const,
+	saveRecordingPages: (videoId: string) =>
+		`/instant-recordings/${encodeURIComponent(videoId)}/pages` as const,
 } as const;
 
 const EXTENSION_API_PREFIX = `/api${EXTENSION_HTTP_PREFIX}`;
@@ -219,6 +221,20 @@ export const deleteInstantRecording = (
 		auth,
 		path: extensionApiPath(ExtensionApiPaths.deleteInstantRecording(videoId)),
 		method: "DELETE",
+	});
+
+export const saveRecordingPages = (
+	settings: ExtensionSettings,
+	auth: ExtensionAuth,
+	videoId: string,
+	pages: { url: string; title: string | null; at: number }[],
+) =>
+	requestJson<{ success: boolean }>({
+		settings,
+		auth,
+		path: extensionApiPath(ExtensionApiPaths.saveRecordingPages(videoId)),
+		method: "POST",
+		body: { pages },
 	});
 
 export const uploadThumbnail = async ({

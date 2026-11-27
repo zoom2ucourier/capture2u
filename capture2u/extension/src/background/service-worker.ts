@@ -4,12 +4,14 @@ import {
 	fetchBootstrap,
 	parseAuthResponse,
 	revokeAuth,
+	saveRecordingPages,
 } from "../shared/api";
 import {
 	isRecordingStatusBroadcast,
 	isServiceWorkerRequest,
 } from "../shared/messages";
 import { rememberRecordingMode } from "../shared/preferences";
+import { PageLinkTracker } from "./page-links";
 import {
 	isRecorderHostPage,
 	RECORDER_FIRST_RUN_PARAM,
@@ -129,6 +131,17 @@ const getTabs = () =>
 	new Promise<chrome.tabs.Tab[]>((resolve) => {
 		chrome.tabs.query({}, resolve);
 	});
+
+const pageLinks = new PageLinkTracker(
+	(target) =>
+		target.mode === "tab" && target.tabId !== null
+			? getTab(target.tabId)
+			: getLastFocusedTab(),
+	async (videoId, pages) => {
+		const { settings, auth } = await requireSignedInState();
+		await saveRecordingPages(settings, auth, videoId, pages);
+	},
+);
 
 const getTab = (tabId: number) =>
 	new Promise<chrome.tabs.Tab | null>((resolve) => {
@@ -599,6 +612,7 @@ const updateActionForStatus = (nextStatus: RecordingStatus) => {
 let lastSharedRecordingStateJson: string | null = null;
 
 const setRecordingStatus = (nextStatus: RecordingStatus) => {
+	pageLinks.onStatus(nextStatus);
 	recordingStatus = nextStatus;
 	void updateActionForStatus(nextStatus);
 	// Session storage is the cross-tab source of truth: every tab's floating
@@ -1530,6 +1544,7 @@ const performRecordingStart = async (
 			: undefined;
 	await showOverlayInTab(tab ?? null, recordingSettings, true);
 
+	pageLinks.begin({ mode, tabId: tabId ?? null });
 	const creatingStatus = { phase: "creating" } satisfies RecordingStatus;
 	setRecordingStatusAndBroadcast(creatingStatus);
 	// The manifest injects the bootstrap content script into every page at
@@ -2259,6 +2274,7 @@ chrome.action.onClicked.addListener((tab) => {
 
 chrome.tabs.onActivated.addListener(({ tabId }) => {
 	void syncActivePreview(tabId).catch(() => undefined);
+	void pageLinks.noteCurrentPage();
 });
 
 chrome.windows.onFocusChanged.addListener((windowId) => {
@@ -2269,12 +2285,15 @@ chrome.windows.onFocusChanged.addListener((windowId) => {
 	}
 	browserWindowFocused = true;
 	externalCaptureAutoPipPending = false;
+	void pageLinks.noteCurrentPage();
 	void exitActivePreviewAutoPip()
 		.then(() => syncActivePreview())
 		.catch(() => undefined);
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+	if (tab.active && (changeInfo.url || changeInfo.title))
+		void pageLinks.noteCurrentPage();
 	if (changeInfo.status === "complete" && tab.active) {
 		void syncActivePreview(tabId).catch(() => undefined);
 	}

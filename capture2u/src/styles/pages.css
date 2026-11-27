@@ -988,6 +988,43 @@
 	fill: currentColor;
 }
 
+.player__page-link {
+	position: absolute;
+	top: var(--space-md);
+	left: var(--space-md);
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	max-width: calc(100% - 2 * var(--space-md));
+	padding: 6px 10px;
+	border-radius: var(--radius-full);
+	background: rgb(1 16 31 / 0.72);
+	color: var(--text-inverse);
+	font-size: var(--font-size-sm);
+	font-weight: 600;
+	line-height: 1.2;
+	text-decoration: none;
+	backdrop-filter: blur(6px);
+	transition: background var(--transition);
+}
+
+.player__page-link:hover,
+.player__page-link:focus-visible {
+	background: var(--l2u-primary);
+}
+
+.player__page-link svg {
+	flex: none;
+}
+
+.player__page-link-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .player__controls {
 	position: absolute;
 	right: 0;

@@ -3,6 +3,7 @@ import { EXTENSION_KEY_PREFIX, hashExtensionKey, requireUser } from "../auth";
 import { adminClient, createVideoRow, deleteVideo, getVideo } from "../db";
 import type { AppBindings } from "../env";
 import { isVideoId } from "../lib/util";
+import { parsePageLinks } from "../../shared/pageLinks";
 
 // The browser extension is Cap's open-source recorder pointed at this Worker,
 // so these routes keep the paths and JSON shapes it already speaks.
@@ -131,6 +132,31 @@ extension.post("/instant-recordings", requireUser, async (c) => {
 
 extension.post("/instant-recordings/progress", requireUser, (c) =>
 	c.json({ success: true }),
+);
+
+extension.post(
+	"/instant-recordings/:videoId/pages",
+	requireUser,
+	async (c) => {
+		const id = c.req.param("videoId");
+		if (!isVideoId(id)) return c.json({ error: "not_found" }, 404);
+		const body = (await c.req.json().catch(() => null)) as {
+			pages?: unknown;
+		} | null;
+		const pages = parsePageLinks(body?.pages);
+		if (!pages) return c.json({ error: "invalid_pages" }, 400);
+		const db = adminClient(c.env);
+		const video = await getVideo(db, id);
+		if (!video) return c.json({ error: "not_found" }, 404);
+		if (video.owner_id !== c.get("user").id)
+			return c.json({ error: "forbidden" }, 403);
+		const { error } = await db
+			.from("videos")
+			.update({ page_links: pages.length > 0 ? pages : null })
+			.eq("id", id);
+		if (error) throw new Error(`Could not save pages: ${error.message}`);
+		return c.json({ success: true });
+	},
 );
 
 extension.delete("/instant-recordings/:videoId", requireUser, async (c) => {

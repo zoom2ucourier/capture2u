@@ -233,6 +233,7 @@ watch.get("/:id", async (c) => {
 		aiStatus: video.ai_status,
 		summary: video.summary,
 		chapters: visibleChapters(video.chapters ?? [], kept),
+		pageLinks: video.page_links ?? [],
 		transcript,
 		playback: token
 			? {

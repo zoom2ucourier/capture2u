@@ -23,6 +23,12 @@ export interface Chapter {
 	start: number;
 }
 
+export interface PageLink {
+	url: string;
+	title: string | null;
+	at: number;
+}
+
 export interface LibraryVideo {
 	id: string;
 	title: string;
@@ -75,6 +81,7 @@ export interface WatchVideo {
 	aiStatus: StageStatus;
 	summary: string | null;
 	chapters: Chapter[];
+	pageLinks: PageLink[];
 	transcript: TranscriptSegment[];
 	playback: {
 		token: string;

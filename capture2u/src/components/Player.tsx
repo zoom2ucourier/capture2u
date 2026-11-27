@@ -16,7 +16,8 @@ import {
 	toAbsolute,
 	toVirtual,
 } from "../../shared/timeline";
-import type { WatchVideo } from "../../shared/types";
+import { pageLinkAt, shortPageLabel } from "../../shared/pageLinks";
+import type { PageLink, WatchVideo } from "../../shared/types";
 import { formatDuration } from "../lib/api";
 import { Icons } from "./common/Icons";
 
@@ -33,10 +34,12 @@ interface PlayerProps {
 	cuts?: TimeRange[];
 	markers?: TimeRange[];
 	visibleSeconds?: number | null;
+	pageLinks?: PageLink[];
 	onFirstPlay?: () => void;
 }
 
 const NO_RANGES: TimeRange[] = [];
+const NO_PAGE_LINKS: PageLink[] = [];
 const UNKNOWN_DURATION_SECONDS = 10 * 86_400;
 const END_TOLERANCE_SECONDS = 0.05;
 
@@ -78,6 +81,7 @@ export function Player({
 	cuts = NO_RANGES,
 	markers = NO_RANGES,
 	visibleSeconds,
+	pageLinks = NO_PAGE_LINKS,
 	onFirstPlay,
 }: PlayerProps) {
 	const containerRef = useRef<HTMLElement | null>(null);
@@ -311,6 +315,7 @@ export function Player({
 	}, [playing, hasHiddenParts, keepInside]);
 
 	const progress = total > 0 ? (position / total) * 100 : 0;
+	const pageLink = pageLinkAt(pageLinks, absoluteTime);
 	const volumeLevel = muted ? 0 : volume;
 
 	return (
@@ -373,6 +378,23 @@ export function Player({
 					src={playback.captionsUrl ?? undefined}
 				/>
 			</video>
+
+			{pageLink && (
+				<a
+					className="player__page-link"
+					href={pageLink.url}
+					target="_blank"
+					rel="noopener noreferrer"
+					title={pageLink.title ? `${pageLink.title}
+${pageLink.url}` : pageLink.url}
+				>
+					<Icons.Link size={14} />
+					<span className="player__page-link-text">
+						{shortPageLabel(pageLink.url)}
+					</span>
+					<Icons.ExternalLink size={12} />
+				</a>
+			)}
 
 			{!playing && (
 				<button

@@ -292,6 +292,7 @@ export function Watch() {
 								cuts={editingTrim ? NO_CUTS : current.cuts}
 								markers={editingTrim ? draftCuts : NO_CUTS}
 								visibleSeconds={shownDuration(current)}
+								pageLinks={current.pageLinks}
 								onFirstPlay={recordView}
 							/>
 						) : (
