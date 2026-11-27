@@ -47,6 +47,8 @@ export function Library() {
 		progress: number;
 	} | null>(null);
 	const [slackAlerts, setSlackAlerts] = useState<boolean | null>(null);
+	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+	const [deleting, setDeleting] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
 	const navigate = useNavigate();
 
@@ -123,6 +125,11 @@ export function Library() {
 					`/api/videos${suffix}`,
 				);
 				setVideos(result.videos);
+				setSelectedIds((current) => {
+					const present = new Set(result.videos.map((video) => video.id));
+					const kept = [...current].filter((id) => present.has(id));
+					return kept.length === current.size ? current : new Set(kept);
+				});
 				setError(null);
 			} catch (cause) {
 				if (cause instanceof ApiRequestError && cause.status === 404)
@@ -165,6 +172,37 @@ export function Library() {
 		} catch {
 			setError("Could not delete that video.");
 		}
+	};
+
+	const toggleSelected = (id: string) =>
+		setSelectedIds((current) => {
+			const next = new Set(current);
+			if (next.has(id)) next.delete(id);
+			else next.add(id);
+			return next;
+		});
+
+	const removeSelected = async () => {
+		const ids = [...selectedIds];
+		if (ids.length === 0 || deleting) return;
+		if (
+			!window.confirm(
+				`Delete ${countLabel(ids.length)}? This cannot be undone.`,
+			)
+		)
+			return;
+		setDeleting(true);
+		const results = await Promise.allSettled(
+			ids.map((id) => api(`/api/videos/${id}`, { method: "DELETE" })),
+		);
+		const failed = results.filter(
+			(result) => result.status === "rejected",
+		).length;
+		setSelectedIds(new Set());
+		await refresh();
+		setDeleting(false);
+		if (failed > 0)
+			setError(`Could not delete ${countLabel(failed)}. Try again.`);
 	};
 
 	const createFolder = async () => {
@@ -216,6 +254,12 @@ export function Library() {
 	const selected = folders.find((folder) => folder.id === folderId) ?? null;
 	const myFolders = folders.filter((folder) => folder.isOwner);
 	const sharedWithMe = folders.filter((folder) => !folder.isOwner);
+
+	const ownedIds = (videos ?? [])
+		.filter((video) => video.isOwner)
+		.map((video) => video.id);
+	const allSelected =
+		ownedIds.length > 0 && ownedIds.every((id) => selectedIds.has(id));
 
 	const subtitle =
 		selected && !selected.isOwner
@@ -408,11 +452,63 @@ export function Library() {
 				</div>
 			)}
 
-			<div className="video-grid">
+			{ownedIds.length > 0 && (
+				<div className="selection-bar">
+					<label className="check selection-bar__all">
+						<input
+							type="checkbox"
+							checked={allSelected}
+							onChange={() =>
+								setSelectedIds(allSelected ? new Set() : new Set(ownedIds))
+							}
+						/>
+						{selectedIds.size > 0
+							? `${selectedIds.size} selected`
+							: "Select all"}
+					</label>
+					{selectedIds.size > 0 && (
+						<>
+							<Button
+								variant="danger"
+								size="sm"
+								startIcon={<Icons.Trash size={14} />}
+								disabled={deleting}
+								onClick={() => void removeSelected()}
+							>
+								{deleting ? "Deleting..." : "Delete selected"}
+							</Button>
+							<Button
+								variant="ghost"
+								size="sm"
+								disabled={deleting}
+								onClick={() => setSelectedIds(new Set())}
+							>
+								Clear
+							</Button>
+						</>
+					)}
+				</div>
+			)}
+
+			<div
+				className={`video-grid${selectedIds.size > 0 ? " video-grid--selecting" : ""}`}
+			>
 				{videos?.map((video) => {
 					const VisibilityIcon = VISIBILITY_ICON[video.visibility];
 					return (
-						<article key={video.id} className="video-card">
+						<article
+							key={video.id}
+							className={`video-card${selectedIds.has(video.id) ? " video-card--selected" : ""}`}
+						>
+							{video.isOwner && (
+								<input
+									className="video-card__select"
+									type="checkbox"
+									aria-label={`Select ${video.title}`}
+									checked={selectedIds.has(video.id)}
+									onChange={() => toggleSelected(video.id)}
+								/>
+							)}
 							<Link to={`/v/${video.id}`} className="video-card__thumb">
 								{video.thumbnailUrl ? (
 									<img src={video.thumbnailUrl} alt="" loading="lazy" />
@@ -451,18 +547,10 @@ export function Library() {
 									{VISIBILITY_LABEL[video.visibility]}
 									{video.hasPassword ? " · Password" : ""}
 								</p>
-								{video.isOwner && (video.keep || video.expiresAt) && (
+								{video.isOwner && video.keep && (
 									<p className="video-card__meta video-card__meta--icon">
-										{video.keep ? (
-											<Icons.Bookmark size={13} />
-										) : (
-											<Icons.Clock size={13} />
-										)}
-										{video.keep
-											? "Kept. Will not be auto-deleted."
-											: video.expiresAt
-												? `Auto-deletes ${formatDate(video.expiresAt)}`
-												: ""}
+										<Icons.Bookmark size={13} />
+										Kept. Will not be auto-deleted.
 									</p>
 								)}
 							</div>

@@ -82,7 +82,23 @@
 	gap: 20px;
 }
 
+.selection-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-sm);
+	min-height: 32px;
+	margin-bottom: var(--space-md);
+}
+
+.selection-bar__all {
+	margin: 0 var(--space-sm) 0 0;
+	font-size: var(--font-size-sm);
+	font-weight: 600;
+}
+
 .video-card {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	border: 1px solid var(--border-light);
@@ -97,6 +113,39 @@
 .video-card:hover {
 	border-color: var(--border);
 	box-shadow: var(--shadow-card);
+}
+
+.video-card--selected,
+.video-card--selected:hover {
+	border-color: var(--l2u-primary);
+	box-shadow: 0 0 0 1px var(--l2u-primary);
+}
+
+.video-card__select {
+	position: absolute;
+	top: var(--space-sm);
+	left: var(--space-sm);
+	z-index: 1;
+	width: 20px;
+	height: 20px;
+	margin: 0;
+	accent-color: var(--l2u-primary);
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity var(--transition);
+}
+
+.video-card:hover .video-card__select,
+.video-card__select:focus-visible,
+.video-card__select:checked,
+.video-grid--selecting .video-card__select {
+	opacity: 1;
+}
+
+@media (hover: none) {
+	.video-card__select {
+		opacity: 1;
+	}
 }
 
 .video-card__thumb {
