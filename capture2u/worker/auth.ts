@@ -2,7 +2,45 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createMiddleware } from "hono/factory";
 import { adminClient } from "./db";
 import type { AppBindings, Env, SessionUser } from "./env";
+import { sha256Hex } from "./lib/tokens";
 import { isAllowedEmail, parseAllowedDomains } from "./lib/util";
+
+export const EXTENSION_KEY_PREFIX = "c2u_";
+
+export const hashExtensionKey = (key: string) =>
+	sha256Hex(`capture2u-extension-key:${key}`);
+
+async function resolveExtensionUser(
+	env: Env,
+	db: SupabaseClient,
+	key: string,
+): Promise<AuthResult> {
+	const { data: entry } = await db
+		.from("extension_keys")
+		.select("id,user_id")
+		.eq("key_hash", await hashExtensionKey(key))
+		.maybeSingle();
+	if (!entry) return { ok: false, reason: "invalid" };
+	const { data: profile } = await db
+		.from("profiles")
+		.select("id,email,role,full_name")
+		.eq("id", entry.user_id)
+		.maybeSingle();
+	if (!profile) return { ok: false, reason: "invalid" };
+	const email = (profile.email as string).toLowerCase();
+	if (!isAllowedEmail(email, parseAllowedDomains(env.ALLOWED_EMAIL_DOMAINS)))
+		return { ok: false, reason: "domain" };
+	return {
+		ok: true,
+		user: {
+			id: profile.id as string,
+			email,
+			role: profile.role === "admin" ? "admin" : "member",
+			fullName: (profile.full_name as string | null) ?? null,
+			extensionKeyId: entry.id as string,
+		},
+	};
+}
 
 export type AuthResult =
 	| { ok: true; user: SessionUser }
@@ -17,6 +55,8 @@ export async function resolveUser(
 		? authorization.slice(7).trim()
 		: "";
 	if (!token) return { ok: false, reason: "missing" };
+	if (token.startsWith(EXTENSION_KEY_PREFIX))
+		return resolveExtensionUser(env, db, token);
 
 	const { data, error } = await db.auth.getUser(token);
 	const authUser = data?.user;

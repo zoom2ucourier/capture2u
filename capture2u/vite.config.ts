@@ -9,6 +9,7 @@ const recorderCore = fileURLToPath(
 
 export default defineConfig({
 	plugins: [react(), cloudflare()],
+	optimizeDeps: { entries: ["index.html"] },
 	resolve: {
 		alias: [{ find: /^@cap\/recorder-core/, replacement: recorderCore }],
 	},

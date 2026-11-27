@@ -9,6 +9,7 @@ import { AppHeader } from "./components/layout/AppHeader";
 import { GateCard } from "./components/layout/GateCard";
 import { SignInForm } from "./components/SignInForm";
 import { Embed } from "./pages/Embed";
+import { ExtensionConnect, ExtensionInstall } from "./pages/Extension";
 import { Library } from "./pages/Library";
 import { RecordPage } from "./pages/Record";
 import { Watch } from "./pages/Watch";
@@ -30,6 +31,14 @@ function Shell({ children }: { children: React.ReactNode }) {
 			<AppHeader>
 				<ButtonLink to="/record" variant="primary" startIcon={<Icons.Record />}>
 					New recording
+				</ButtonLink>
+				<ButtonLink
+					to="/extension"
+					variant="ghost"
+					aria-label="Chrome extension"
+					startIcon={<Icons.Puzzle />}
+				>
+					<span className="app-header__sign-out">Extension</span>
 				</ButtonLink>
 				{user && (
 					<span className="app-header__user">
@@ -77,6 +86,15 @@ function App() {
 					</Protected>
 				}
 			/>
+			<Route
+				path="/extension"
+				element={
+					<Protected>
+						<ExtensionInstall />
+					</Protected>
+				}
+			/>
+			<Route path="/extension/connect" element={<ExtensionConnect />} />
 			<Route path="/v/:id" element={<Watch />} />
 			<Route path="/embed/:id" element={<Embed />} />
 			<Route path="*" element={<Navigate to="/" replace />} />

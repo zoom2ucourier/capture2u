@@ -4,9 +4,18 @@ import {
 	useCallback,
 	useEffect,
 	useImperativeHandle,
+	useMemo,
 	useRef,
 	useState,
 } from "react";
+import {
+	keptRanges,
+	keptTotal,
+	playablePosition,
+	type TimeRange,
+	toAbsolute,
+	toVirtual,
+} from "../../shared/timeline";
 import type { WatchVideo } from "../../shared/types";
 import { formatDuration } from "../lib/api";
 import { Icons } from "./common/Icons";
@@ -21,9 +30,15 @@ interface PlayerProps {
 	playback: NonNullable<WatchVideo["playback"]>;
 	trimStart: number | null;
 	trimEnd: number | null;
-	durationSeconds?: number | null;
+	cuts?: TimeRange[];
+	markers?: TimeRange[];
+	visibleSeconds?: number | null;
 	onFirstPlay?: () => void;
 }
+
+const NO_RANGES: TimeRange[] = [];
+const UNKNOWN_DURATION_SECONDS = 10 * 86_400;
+const END_TOLERANCE_SECONDS = 0.05;
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5];
 const SPEED_KEY = "capture2u.playbackSpeed";
@@ -60,7 +75,9 @@ export function Player({
 	playback,
 	trimStart,
 	trimEnd,
-	durationSeconds,
+	cuts = NO_RANGES,
+	markers = NO_RANGES,
+	visibleSeconds,
 	onFirstPlay,
 }: PlayerProps) {
 	const containerRef = useRef<HTMLElement | null>(null);
@@ -77,11 +94,24 @@ export function Player({
 	const [fullscreen, setFullscreen] = useState(false);
 	const [controlsVisible, setControlsVisible] = useState(true);
 
-	const start = trimStart ?? 0;
-	const fullDuration = mediaDuration || durationSeconds || 0;
-	const end = trimEnd ?? fullDuration;
-	const total = Math.max(0, end - start);
-	const position = Math.min(total, Math.max(0, absoluteTime - start));
+	// Viewers only ever see the kept stretches, laid end to end. The file is
+	// played as it is and the hidden stretches are jumped over. Until the
+	// browser has read the file's own length, the end is left open rather than
+	// guessed, so playback is never stopped early.
+	const kept = useMemo(
+		() =>
+			keptRanges(
+				mediaDuration || UNKNOWN_DURATION_SECONDS,
+				trimStart,
+				trimEnd,
+				cuts,
+			),
+		[mediaDuration, trimStart, trimEnd, cuts],
+	);
+	const start = kept[0]?.start ?? trimStart ?? 0;
+	const end = kept[kept.length - 1]?.end ?? mediaDuration;
+	const total = mediaDuration ? keptTotal(kept) : (visibleSeconds ?? 0);
+	const position = Math.min(total, toVirtual(kept, absoluteTime));
 	const skipSeconds = total >= LONG_VIDEO_SECONDS ? 10 : 5;
 	const hasCaptions = Boolean(playback.captionsUrl);
 	const canFloat =
@@ -91,12 +121,11 @@ export function Player({
 		(seconds: number) => {
 			const element = videoRef.current;
 			if (!element) return;
-			const upper = end > start ? end : Number.MAX_SAFE_INTEGER;
-			const next = Math.min(upper, Math.max(start, seconds));
+			const next = playablePosition(kept, Math.max(start, seconds)) ?? end;
 			element.currentTime = next;
 			setAbsoluteTime(next);
 		},
-		[start, end],
+		[kept, start, end],
 	);
 
 	useImperativeHandle(
@@ -121,9 +150,10 @@ export function Player({
 	const skip = useCallback(
 		(seconds: number) => {
 			const element = videoRef.current;
-			if (element) seekTo(element.currentTime + seconds);
+			if (!element) return;
+			seekTo(toAbsolute(kept, toVirtual(kept, element.currentTime) + seconds));
 		},
-		[seekTo],
+		[kept, seekTo],
 	);
 
 	const toggleMute = useCallback(() => {
@@ -245,22 +275,40 @@ export function Player({
 		start > 0 || trimEnd !== null
 			? `#t=${start}${trimEnd !== null ? `,${trimEnd}` : ""}`
 			: "";
+	const hasHiddenParts = start > 0 || trimEnd !== null || cuts.length > 0;
 
-	const keepInside = (element: HTMLVideoElement) => {
-		if (element.currentTime < start - 0.05) {
-			element.currentTime = start;
-			return;
-		}
-		if (trimEnd !== null && element.currentTime >= trimEnd) {
-			if (!element.paused) element.pause();
-			if (element.currentTime > trimEnd + 0.05) element.currentTime = trimEnd;
-		}
-	};
+	const keepInside = useCallback(
+		(element: HTMLVideoElement) => {
+			if (!hasHiddenParts) return;
+			const playable = playablePosition(kept, element.currentTime);
+			if (playable === null) {
+				if (!element.paused) element.pause();
+				if (element.currentTime > end + END_TOLERANCE_SECONDS)
+					element.currentTime = end;
+				return;
+			}
+			if (playable > element.currentTime + 0.01) element.currentTime = playable;
+		},
+		[kept, end, hasHiddenParts],
+	);
 
 	const track = (element: HTMLVideoElement) => {
 		keepInside(element);
 		setAbsoluteTime(element.currentTime);
 	};
+
+	// Time updates arrive only a few times a second, which would let a moment
+	// of a cut section show before it is skipped. While playing, check every
+	// frame instead.
+	useEffect(() => {
+		if (!playing || !hasHiddenParts) return;
+		let frame = window.requestAnimationFrame(function check() {
+			const element = videoRef.current;
+			if (element && !element.seeking) keepInside(element);
+			frame = window.requestAnimationFrame(check);
+		});
+		return () => window.cancelAnimationFrame(frame);
+	}, [playing, hasHiddenParts, keepInside]);
 
 	const progress = total > 0 ? (position / total) * 100 : 0;
 	const volumeLevel = muted ? 0 : volume;
@@ -307,7 +355,10 @@ export function Player({
 				}}
 				onPlay={(event) => {
 					const element = event.currentTarget;
-					if (trimEnd !== null && element.currentTime >= trimEnd - 0.05)
+					if (
+						hasHiddenParts &&
+						element.currentTime >= end - END_TOLERANCE_SECONDS
+					)
 						element.currentTime = start;
 					setPlaying(true);
 					setStarted(true);
@@ -335,18 +386,33 @@ export function Player({
 			)}
 
 			<div className="player__controls">
-				<input
-					className="player__seek"
-					type="range"
-					min={0}
-					max={total || 1}
-					step={0.1}
-					value={position}
-					aria-label="Seek"
-					aria-valuetext={`${formatDuration(position)} of ${formatDuration(total)}`}
-					style={{ "--player-progress": `${progress}%` } as CSSProperties}
-					onChange={(event) => seekTo(start + Number(event.target.value))}
-				/>
+				<div className="player__seek-wrap">
+					<input
+						className="player__seek"
+						type="range"
+						min={0}
+						max={total || 1}
+						step={0.1}
+						value={position}
+						aria-label="Seek"
+						aria-valuetext={`${formatDuration(position)} of ${formatDuration(total)}`}
+						style={{ "--player-progress": `${progress}%` } as CSSProperties}
+						onChange={(event) =>
+							seekTo(toAbsolute(kept, Number(event.target.value)))
+						}
+					/>
+					{total > 0 &&
+						markers.map((marker) => (
+							<span
+								key={`${marker.start}-${marker.end}`}
+								className="player__marker"
+								style={{
+									left: `${(toVirtual(kept, marker.start) / total) * 100}%`,
+									width: `${Math.max(0.4, ((toVirtual(kept, marker.end) - toVirtual(kept, marker.start)) / total) * 100)}%`,
+								}}
+							/>
+						))}
+				</div>
 				<div className="player__row">
 					<button
 						type="button"

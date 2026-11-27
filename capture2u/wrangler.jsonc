@@ -22,6 +22,8 @@
 	"routes": [{ "pattern": "capture.locate2u.io", "custom_domain": true }],
 	"triggers": { "crons": ["0 16 * * *"] },
 	"observability": { "enabled": true },
+	// Rewriting a long recording into a seekable file is steady CPU work.
+	"limits": { "cpu_ms": 300000 },
 	// Variables and secrets added in the Cloudflare dashboard are kept on every
 	// deploy. Only the two public Supabase values are set here; a name listed
 	// here would overwrite a dashboard value of the same name.

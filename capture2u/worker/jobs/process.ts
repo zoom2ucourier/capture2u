@@ -4,8 +4,14 @@ import { createToken } from "../lib/tokens";
 import {
 	normalizeTranscript,
 	parseAiSummary,
+	suggestCuts,
 	transcriptForPrompt,
 } from "../lib/transcript";
+
+type Transcript = Pick<
+	ReturnType<typeof normalizeTranscript>,
+	"text" | "segments"
+>;
 
 const MEDIA_FETCH_TOKEN_TTL_SECONDS = 2 * 60 * 60;
 const FALLBACK_TRANSCRIBE_MODEL = "@cf/openai/whisper-large-v3-turbo";
@@ -58,11 +64,27 @@ async function transcribeWith(env: Env, video: VideoRow, model: string) {
 	if (!env.PUBLIC_BASE_URL)
 		throw new Error("No public address is known for this video");
 	const audioUrl = `${env.PUBLIC_BASE_URL}/media/${video.id}/video?t=${encodeURIComponent(token)}`;
-	const raw = await runModel(env, model, { audio_url: audioUrl });
+	const raw = await runUrlModel(env, model, audioUrl);
 	return normalizeTranscript(raw, {
 		timesInMilliseconds: model.startsWith("assemblyai/"),
 		durationSeconds: video.duration_seconds,
 	});
+}
+
+// Asking for "um" and "uh" to be written down is what lets the owner remove
+// them later. A model that does not know the option gets a plain request.
+async function runUrlModel(env: Env, model: string, audioUrl: string) {
+	if (model.startsWith("assemblyai/")) {
+		try {
+			return await runModel(env, model, {
+				audio_url: audioUrl,
+				disfluencies: true,
+			});
+		} catch (error) {
+			console.error("[capture2u] speech model refused disfluencies", error);
+		}
+	}
+	return runModel(env, model, { audio_url: audioUrl });
 }
 
 async function transcribe(env: Env, video: VideoRow) {
@@ -99,11 +121,7 @@ const SUMMARY_SCHEMA = {
 	required: ["title", "summary", "chapters"],
 };
 
-async function summarize(
-	env: Env,
-	video: VideoRow,
-	transcript: ReturnType<typeof normalizeTranscript>,
-) {
+async function summarize(env: Env, video: VideoRow, transcript: Transcript) {
 	const raw = await runModel(env, env.SUMMARY_MODEL, {
 		messages: [
 			{
@@ -133,7 +151,7 @@ export async function processVideo(env: Env, videoId: string) {
 		if (error) throw new Error(`Could not update video: ${error.message}`);
 	};
 
-	let transcript: ReturnType<typeof normalizeTranscript>;
+	let transcript: Transcript;
 	if (video.transcript_status === "ready" && video.transcript_segments) {
 		transcript = {
 			text: video.transcript_text ?? "",
@@ -141,15 +159,17 @@ export async function processVideo(env: Env, videoId: string) {
 		};
 	} else {
 		await update({ transcript_status: "processing" });
-		transcript = await transcribe(env, video);
-		if (!transcript.text) {
+		const heard = await transcribe(env, video);
+		transcript = heard;
+		if (!heard.text) {
 			await update({ transcript_status: "none", ai_status: "none" });
 			return;
 		}
 		await update({
 			transcript_status: "ready",
-			transcript_text: transcript.text,
-			transcript_segments: transcript.segments,
+			transcript_text: heard.text,
+			transcript_segments: heard.segments,
+			suggested_cuts: suggestCuts(heard.words, video.duration_seconds),
 		});
 	}
 

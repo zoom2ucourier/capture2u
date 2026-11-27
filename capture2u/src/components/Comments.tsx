@@ -1,29 +1,44 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { REACTION_EMOJI, type VideoComment } from "../../shared/types";
-import { api, formatDate, formatDuration } from "../lib/api";
+import { mentionedIn } from "../../shared/mentions";
+import {
+	type Person,
+	REACTION_EMOJI,
+	type VideoComment,
+} from "../../shared/types";
+import { api, formatDate } from "../lib/api";
 import { Button } from "./common/Button";
 import { Card } from "./common/Card";
 import { Alert, Avatar } from "./common/Feedback";
 import { Icons } from "./common/Icons";
+import { MentionInput, MentionText } from "./MentionInput";
 
 interface CommentsProps {
 	videoId: string;
 	unlockToken: string | null;
 	getCurrentTime: () => number;
 	onSeek: (seconds: number) => void;
+	formatTime: (seconds: number) => string;
 }
+
+const mentionIds = (text: string, people: Person[]) => [
+	...new Set(mentionedIn(text, people).map((person) => person.id)),
+];
 
 export function Comments({
 	videoId,
 	unlockToken,
 	getCurrentTime,
 	onSeek,
+	formatTime,
 }: CommentsProps) {
 	const [comments, setComments] = useState<VideoComment[] | null>(null);
 	const [draft, setDraft] = useState("");
 	const [atCurrentTime, setAtCurrentTime] = useState(true);
 	const [replyTo, setReplyTo] = useState<string | null>(null);
 	const [replyDraft, setReplyDraft] = useState("");
+	const [mentioned, setMentioned] = useState<Person[]>([]);
+	const addMention = (person: Person) =>
+		setMentioned((current) => [...current, person]);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -138,19 +153,18 @@ export function Comments({
 						kind: "text",
 						body: draft,
 						timestampSeconds: atCurrentTime ? getCurrentTime() : null,
+						mentions: mentionIds(draft, mentioned),
 					}).then((saved) => {
 						if (saved) setDraft("");
 					});
 				}}
 			>
-				<textarea
-					className="form-input form-textarea"
-					rows={2}
-					maxLength={4000}
-					placeholder="Add a comment"
-					aria-label="Add a comment"
+				<MentionInput
 					value={draft}
-					onChange={(event) => setDraft(event.target.value)}
+					label="Add a comment"
+					placeholder="Add a comment. Type @ to mention a colleague."
+					onChange={setDraft}
+					onMention={addMention}
 				/>
 				<div className="comment-form__footer">
 					<label className="check">
@@ -182,7 +196,12 @@ export function Comments({
 			<ul className="comment-list">
 				{threads.map((comment) => (
 					<li key={comment.id} className="comment-list__thread">
-						<CommentBody comment={comment} onSeek={onSeek} onDelete={remove} />
+						<CommentBody
+							comment={comment}
+							onSeek={onSeek}
+							onDelete={remove}
+							formatTime={formatTime}
+						/>
 						<ul className="comment-list comment-list--replies">
 							{repliesTo(comment.id).map((reply) => (
 								<li key={reply.id}>
@@ -190,6 +209,7 @@ export function Comments({
 										comment={reply}
 										onSeek={onSeek}
 										onDelete={remove}
+										formatTime={formatTime}
 									/>
 								</li>
 							))}
@@ -203,6 +223,7 @@ export function Comments({
 										kind: "text",
 										body: replyDraft,
 										parentId: comment.id,
+										mentions: mentionIds(replyDraft, mentioned),
 									}).then((saved) => {
 										if (!saved) return;
 										setReplyDraft("");
@@ -210,14 +231,12 @@ export function Comments({
 									});
 								}}
 							>
-								<textarea
-									className="form-input form-textarea"
-									rows={2}
-									maxLength={4000}
-									placeholder="Write a reply"
-									aria-label="Write a reply"
+								<MentionInput
 									value={replyDraft}
-									onChange={(event) => setReplyDraft(event.target.value)}
+									label="Write a reply"
+									placeholder="Write a reply"
+									onChange={setReplyDraft}
+									onMention={addMention}
 								/>
 								<div className="comment-form__footer comment-form__footer--start">
 									<Button
@@ -260,10 +279,12 @@ function CommentBody({
 	comment,
 	onSeek,
 	onDelete,
+	formatTime,
 }: {
 	comment: VideoComment;
 	onSeek: (seconds: number) => void;
 	onDelete: (comment: VideoComment) => void;
+	formatTime: (seconds: number) => string;
 }) {
 	const timestamp = comment.timestampSeconds;
 	return (
@@ -279,7 +300,7 @@ function CommentBody({
 							className="timeline__time comment__time"
 							onClick={() => onSeek(timestamp)}
 						>
-							{formatDuration(timestamp)}
+							{formatTime(timestamp)}
 						</button>
 					)}
 					{comment.canDelete && (
@@ -292,7 +313,9 @@ function CommentBody({
 						</button>
 					)}
 				</p>
-				<p className="comment__text">{comment.body}</p>
+				<p className="comment__text">
+					<MentionText text={comment.body} people={comment.mentions} />
+				</p>
 			</div>
 		</div>
 	);

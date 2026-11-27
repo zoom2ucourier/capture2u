@@ -3,6 +3,7 @@ import type { LibraryVideo, Visibility } from "../../shared/types";
 import { requireUser } from "../auth";
 import {
 	adminClient,
+	createVideoRow,
 	deleteVideo,
 	getVideo,
 	profileNames,
@@ -17,10 +18,10 @@ import {
 	expiryDate,
 	isUuid,
 	isVideoId,
-	newVideoId,
+	normalizeCuts,
 	normalizeTrim,
 	positiveInt,
-	trimmedDuration,
+	visibleDuration,
 } from "../lib/util";
 import { getFolder } from "./folders";
 
@@ -52,7 +53,11 @@ export async function toLibraryVideo(
 		durationSeconds:
 			video.owner_id === viewerId
 				? video.duration_seconds
-				: trimmedDuration(video.duration_seconds, videoTrim(video)),
+				: visibleDuration(
+						video.duration_seconds,
+						videoTrim(video),
+						video.cuts ?? [],
+					),
 		viewCount: video.view_count,
 		createdAt: video.created_at,
 		expiresAt: expiryDate(video.created_at, video.keep, retentionDays),
@@ -70,28 +75,24 @@ export const videos = new Hono<AppBindings>();
 videos.use("*", requireUser);
 
 videos.post("/", async (c) => {
-	const user = c.get("user");
-	const db = adminClient(c.env);
-	const body = (await c.req.json().catch(() => ({}))) as { title?: unknown };
+	const body = (await c.req.json().catch(() => ({}))) as {
+		title?: unknown;
+		source?: unknown;
+	};
 	const title =
 		typeof body.title === "string" && body.title.trim()
 			? body.title.trim().slice(0, 200)
-			: `Recording ${new Date().toISOString().slice(0, 10)}`;
-
-	for (let attempt = 0; attempt < 3; attempt += 1) {
-		const id = newVideoId();
-		const { error } = await db
-			.from("videos")
-			.insert({ id, owner_id: user.id, title });
-		if (!error)
-			return c.json({
-				id,
-				shareUrl: `${new URL(c.req.url).origin}/v/${id}`,
-			});
-		if (error.code !== "23505")
-			throw new Error(`Could not create video: ${error.message}`);
-	}
-	throw new Error("Could not allocate a video id");
+			: null;
+	const created = await createVideoRow(
+		adminClient(c.env),
+		c.get("user").id,
+		title,
+		body.source === "upload" ? "upload" : "recording",
+	);
+	return c.json({
+		id: created.id,
+		shareUrl: `${new URL(c.req.url).origin}/v/${created.id}`,
+	});
 });
 
 videos.get("/", async (c) => {
@@ -225,6 +226,42 @@ videos.patch("/:id", async (c) => {
 				);
 			update.trim_start_seconds = trim.start;
 			update.trim_end_seconds = trim.end;
+		}
+		if ("cuts" in body) {
+			const cuts = normalizeCuts(body.cuts, video.duration_seconds, {
+				start:
+					"trim_start_seconds" in update
+						? (update.trim_start_seconds as number | null)
+						: video.trim_start_seconds,
+				end:
+					"trim_end_seconds" in update
+						? (update.trim_end_seconds as number | null)
+						: video.trim_end_seconds,
+			});
+			if (cuts === "invalid")
+				return c.json(
+					{
+						error: "invalid_cuts",
+						message: "Leave at least one second of video after your cuts.",
+					},
+					400,
+				);
+			update.cuts = cuts.length > 0 ? cuts : null;
+		} else if (
+			"trim" in body &&
+			normalizeCuts(video.cuts, video.duration_seconds, {
+				start: update.trim_start_seconds as number | null,
+				end: update.trim_end_seconds as number | null,
+			}) === "invalid"
+		) {
+			return c.json(
+				{
+					error: "invalid_trim",
+					message:
+						"Leave at least one second of video between the start and the end.",
+				},
+				400,
+			);
 		}
 	}
 

@@ -3,8 +3,10 @@ import type { PublicConfig } from "../shared/types";
 import { requireUser } from "./auth";
 import { adminClient, getVideo, isOpenVideo, profileNames } from "./db";
 import type { AppBindings, JobMessage, RawEnv } from "./env";
+import { cleanFirstUploads, optimizeVideo } from "./jobs/optimize";
 import { markProcessingFailed, processVideo } from "./jobs/process";
 import { cleanStaleUploads, runRetention } from "./jobs/retention";
+import { slackConfigured } from "./lib/slack";
 import {
 	embedHtml,
 	escapeHtml,
@@ -12,8 +14,10 @@ import {
 	parseAllowedDomains,
 	positiveInt,
 } from "./lib/util";
+import { account } from "./routes/account";
 import { auth } from "./routes/auth";
 import { comments } from "./routes/comments";
+import { extension } from "./routes/extension";
 import { folders } from "./routes/folders";
 import { media } from "./routes/media";
 import { sharedVideoId, slack } from "./routes/slack";
@@ -35,11 +39,14 @@ app.get("/api/config", (c) => {
 		supabaseAnonKey: c.env.SUPABASE_ANON_KEY,
 		allowedDomains: parseAllowedDomains(c.env.ALLOWED_EMAIL_DOMAINS),
 		retentionDays: positiveInt(c.env.RETENTION_DAYS, 365),
+		slackAlerts: slackConfigured(c.env),
 	};
 	return c.json(config, 200, { "Cache-Control": "public, max-age=300" });
 });
 
 app.get("/api/me", requireUser, (c) => c.json({ user: c.get("user") }));
+app.route("/api/account", account);
+app.route("/api/extension", extension);
 
 app.get("/api/oembed", async (c) => {
 	const id = sharedVideoId(c.req.query("url") ?? "", c.env.PUBLIC_BASE_URL);
@@ -165,8 +172,22 @@ export default {
 		for (const message of batch.messages) {
 			const job = message.body;
 			const env = resolveEnv(raw, job?.origin);
-			if (job?.type !== "process-video" || !isVideoId(job.videoId)) {
+			if (
+				(job?.type !== "process-video" && job?.type !== "optimize-video") ||
+				!isVideoId(job.videoId)
+			) {
 				message.ack();
+				continue;
+			}
+			if (job.type === "optimize-video") {
+				try {
+					await optimizeVideo(env, job.videoId);
+					message.ack();
+				} catch (error) {
+					console.error("[capture2u] optimize-video", job.videoId, error);
+					if (message.attempts >= 3) message.ack();
+					else message.retry({ delaySeconds: 120 });
+				}
 				continue;
 			}
 			try {
@@ -194,6 +215,9 @@ export default {
 			(async () => {
 				await cleanStaleUploads(env).catch((error) =>
 					console.error("[stale-upload]", error),
+				);
+				await cleanFirstUploads(env).catch((error) =>
+					console.error("[first-upload]", error),
 				);
 				await runRetention(env).catch((error) =>
 					console.error("[retention]", error),

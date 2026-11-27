@@ -1,4 +1,9 @@
+import type { TimeRange } from "./timeline";
+
+export type { TimeRange };
+
 export type Visibility = "public" | "company" | "private";
+export type VideoSource = "recording" | "extension" | "upload";
 export type VideoStatus = "uploading" | "ready" | "failed";
 export type StageStatus =
 	| "pending"
@@ -58,6 +63,9 @@ export interface WatchVideo {
 	durationSeconds: number | null;
 	trimStart: number | null;
 	trimEnd: number | null;
+	cuts: TimeRange[];
+	suggestedCuts: SuggestedCuts | null;
+	optimized: boolean;
 	width: number | null;
 	height: number | null;
 	viewCount: number;
@@ -75,6 +83,11 @@ export interface WatchVideo {
 		captionsUrl: string | null;
 		downloadUrl: string | null;
 	} | null;
+}
+
+export interface SuggestedCuts {
+	silences: TimeRange[];
+	fillers: TimeRange[];
 }
 
 export interface VideoViewer {
@@ -100,6 +113,16 @@ export interface VideoComment {
 	authorName: string;
 	isMine: boolean;
 	canDelete: boolean;
+	mentions: Person[];
+}
+
+export interface Person {
+	id: string;
+	name: string;
+}
+
+export interface AccountSettings {
+	slackAlerts: boolean;
 }
 
 export const REACTION_EMOJI = ["👍", "❤️", "😂", "🎉", "😮", "👏"] as const;
@@ -111,6 +134,7 @@ export interface PublicConfig {
 	supabaseAnonKey: string;
 	allowedDomains: string[];
 	retentionDays: number;
+	slackAlerts: boolean;
 }
 
 export interface ApiError {

@@ -2,17 +2,25 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { Hono } from "hono";
 import type { VideoViewers, WatchVideo } from "../../shared/types";
 import { resolveUser } from "../auth";
-import { adminClient, getVideo, type VideoRow, videoTrim } from "../db";
+import {
+	adminClient,
+	getVideo,
+	type VideoRow,
+	videoKept,
+	videoTrim,
+} from "../db";
 import type { AppBindings, Env, SessionUser } from "../env";
 import { verifyPassword } from "../lib/password";
+import { escapeSlack, sendSlackAlerts, slackLink } from "../lib/slack";
 import { createToken, sha256Hex, verifyToken } from "../lib/tokens";
 import {
 	displayName,
 	expiryDate,
 	isVideoId,
 	positiveInt,
-	trimmedDuration,
-	withinTrim,
+	visibleChapters,
+	visibleDuration,
+	visibleSegments,
 } from "../lib/util";
 
 const PLAY_TOKEN_TTL_SECONDS = 6 * 60 * 60;
@@ -179,9 +187,11 @@ watch.get("/:id", async (c) => {
 		: null;
 	const query = token ? `?t=${encodeURIComponent(token)}` : "";
 	const trim = videoTrim(video);
+	const cuts = video.cuts ?? [];
+	const kept = videoKept(video);
 	const transcript =
 		video.transcript_status === "ready"
-			? withinTrim(video.transcript_segments ?? [], trim)
+			? visibleSegments(video.transcript_segments ?? [], kept)
 			: [];
 
 	const response: WatchVideo = {
@@ -208,9 +218,12 @@ watch.get("/:id", async (c) => {
 		ownerAvatarUrl: (owner?.avatar_url as string | null) ?? null,
 		durationSeconds: isOwner
 			? video.duration_seconds
-			: trimmedDuration(video.duration_seconds, trim),
+			: visibleDuration(video.duration_seconds, trim, cuts),
 		trimStart: trim.start,
 		trimEnd: trim.end,
+		cuts,
+		suggestedCuts: isOwner ? video.suggested_cuts : null,
+		optimized: video.optimized,
 		width: video.width,
 		height: video.height,
 		viewCount: video.view_count,
@@ -219,12 +232,12 @@ watch.get("/:id", async (c) => {
 		transcriptStatus: video.transcript_status,
 		aiStatus: video.ai_status,
 		summary: video.summary,
-		chapters: withinTrim(video.chapters ?? [], trim),
+		chapters: visibleChapters(video.chapters ?? [], kept),
 		transcript,
 		playback: token
 			? {
 					token,
-					videoUrl: `/media/${video.id}/video${query}`,
+					videoUrl: `/media/${video.id}/video${query}&f=${video.optimized ? "s" : "r"}`,
 					posterUrl: video.thumbnail_key
 						? `/media/${video.id}/thumb.jpg${query}`
 						: null,
@@ -297,5 +310,53 @@ watch.post("/:id/view", async (c) => {
 		p_viewer_id: viewer?.id ?? null,
 	});
 	if (error) throw new Error(`Could not record view: ${error.message}`);
+	if (data === true)
+		c.executionCtx.waitUntil(
+			alertOwnerOfView(c.env, db, video, viewer, viewerKey).catch((cause) =>
+				console.error("[capture2u] view alert", cause),
+			),
+		);
 	return c.json({ counted: data === true });
 });
+
+// Staff are announced the first time each of them watches. Viewers who are
+// not signed in cannot be told apart reliably, so only the first one is.
+async function alertOwnerOfView(
+	env: Env,
+	db: SupabaseClient,
+	video: VideoRow,
+	viewer: SessionUser | null,
+	viewerKey: string,
+) {
+	const link = slackLink(`${env.PUBLIC_BASE_URL}/v/${video.id}`, video.title);
+	if (viewer) {
+		const { count } = await db
+			.from("video_views")
+			.select("video_id", { count: "exact", head: true })
+			.eq("video_id", video.id)
+			.eq("viewer_key", viewerKey);
+		if ((count ?? 0) > 1) return;
+		const name = escapeSlack(displayName(viewer.fullName, viewer.email));
+		await sendSlackAlerts(
+			env,
+			db,
+			[video.owner_id],
+			`:eyes: *${name}* watched ${link}`,
+		);
+		return;
+	}
+	if (video.first_view_notified_at) return;
+	const { data } = await db
+		.from("videos")
+		.update({ first_view_notified_at: new Date().toISOString() })
+		.eq("id", video.id)
+		.is("first_view_notified_at", null)
+		.select("id");
+	if (!data || data.length === 0) return;
+	await sendSlackAlerts(
+		env,
+		db,
+		[video.owner_id],
+		`:eyes: Someone who was not signed in watched ${link}`,
+	);
+}

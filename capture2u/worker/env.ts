@@ -1,5 +1,5 @@
 export type JobMessage = {
-	type: "process-video";
+	type: "process-video" | "optimize-video";
 	videoId: string;
 	origin?: string;
 };
@@ -27,6 +27,7 @@ export interface Settings {
 	EMAIL_FROM: string;
 	SLACK_SIGNING_SECRET: string;
 	SLACK_BOT_TOKEN: string;
+	EXTENSION_IDS: string;
 }
 
 export type Env = Bindings & Settings;
@@ -37,6 +38,7 @@ export interface SessionUser {
 	email: string;
 	role: "member" | "admin";
 	fullName: string | null;
+	extensionKeyId?: string;
 }
 
 export type AppBindings = {

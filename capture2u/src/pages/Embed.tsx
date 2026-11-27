@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import { shownDuration } from "../../shared/timeline";
 import type { WatchVideo } from "../../shared/types";
 import { ButtonAnchor } from "../components/common/Button";
 import { Logo } from "../components/common/Logo";
@@ -47,7 +48,8 @@ export function Embed() {
 					playback={playback}
 					trimStart={state.video.trimStart}
 					trimEnd={state.video.trimEnd}
-					durationSeconds={state.video.durationSeconds}
+					cuts={state.video.cuts}
+					visibleSeconds={shownDuration(state.video)}
 					onFirstPlay={() => {
 						if (viewSentRef.current) return;
 						viewSentRef.current = true;

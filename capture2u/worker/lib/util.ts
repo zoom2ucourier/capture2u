@@ -1,3 +1,11 @@
+import {
+	keptRanges,
+	keptTotal,
+	mergeRanges,
+	overlapsKept,
+	type TimeRange,
+} from "../../shared/timeline";
+
 const ID_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
 
 export function newVideoId(length = 12) {
@@ -116,22 +124,91 @@ export function normalizeTrim(
 	return { start, end };
 }
 
-export function withinTrim<T extends { start: number; end?: number }>(
-	items: T[],
+const UNKNOWN_DURATION_SECONDS = 10 * 86_400;
+const MAX_CUTS = 500;
+const MIN_CUT_SECONDS = 0.1;
+
+export function visibleRanges(
+	durationSeconds: number | null,
 	trim: Trim,
+	cuts: TimeRange[],
 ) {
-	if (trim.start === null && trim.end === null) return items;
-	const from = trim.start ?? 0;
-	const to = trim.end ?? Number.POSITIVE_INFINITY;
-	return items.filter(
-		(item) => (item.end ?? item.start) >= from && item.start < to,
+	return keptRanges(
+		durationSeconds !== null && durationSeconds > 0
+			? durationSeconds
+			: UNKNOWN_DURATION_SECONDS,
+		trim.start,
+		trim.end,
+		cuts,
 	);
 }
 
-export function trimmedDuration(durationSeconds: number | null, trim: Trim) {
+export function normalizeCuts(
+	input: unknown,
+	durationSeconds: number | null,
+	trim: Trim,
+): TimeRange[] | "invalid" {
+	if (input === null || input === undefined) return [];
+	if (!Array.isArray(input) || input.length > MAX_CUTS) return "invalid";
+	const ranges: TimeRange[] = [];
+	for (const entry of input) {
+		const item = entry as { start?: unknown; end?: unknown } | null;
+		const start = item?.start;
+		const end = item?.end;
+		if (
+			typeof start !== "number" ||
+			typeof end !== "number" ||
+			!Number.isFinite(start) ||
+			!Number.isFinite(end) ||
+			start < 0 ||
+			end <= start
+		)
+			return "invalid";
+		ranges.push({
+			start,
+			end:
+				durationSeconds !== null && durationSeconds > 0
+					? Math.min(end, durationSeconds)
+					: end,
+		});
+	}
+	const cuts = mergeRanges(ranges, MIN_CUT_SECONDS);
+	if (
+		keptTotal(visibleRanges(durationSeconds, trim, cuts)) < MIN_TRIMMED_SECONDS
+	)
+		return "invalid";
+	return cuts;
+}
+
+export function visibleSegments<T extends { start: number; end: number }>(
+	items: T[],
+	kept: TimeRange[],
+) {
+	return items.filter((item) => overlapsKept(kept, item.start, item.end));
+}
+
+// A chapter covers everything up to the next chapter, so it stays listed as
+// long as some of that stretch is still shown.
+export function visibleChapters<T extends { start: number }>(
+	items: T[],
+	kept: TimeRange[],
+) {
+	const last = kept[kept.length - 1];
+	if (!last) return [];
+	return items.filter((item, index) =>
+		overlapsKept(kept, item.start, items[index + 1]?.start ?? last.end),
+	);
+}
+
+export function visibleDuration(
+	durationSeconds: number | null,
+	trim: Trim,
+	cuts: TimeRange[],
+) {
 	if (durationSeconds === null) return null;
-	const end = Math.min(trim.end ?? durationSeconds, durationSeconds);
-	return Math.max(0, end - (trim.start ?? 0));
+	return (
+		Math.round(keptTotal(visibleRanges(durationSeconds, trim, cuts)) * 10) / 10
+	);
 }
 
 export const nameFromEmail = (email: string) =>

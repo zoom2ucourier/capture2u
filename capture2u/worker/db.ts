@@ -2,12 +2,20 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type {
 	Chapter,
 	StageStatus,
+	SuggestedCuts,
+	TimeRange,
 	TranscriptSegment,
+	VideoSource,
 	VideoStatus,
 	Visibility,
 } from "../shared/types";
 import type { Env } from "./env";
-import { displayName, videoObjectPrefix } from "./lib/util";
+import {
+	displayName,
+	newVideoId,
+	videoObjectPrefix,
+	visibleRanges,
+} from "./lib/util";
 
 export interface VideoRow {
 	id: string;
@@ -36,12 +44,18 @@ export interface VideoRow {
 	folder_id: string | null;
 	trim_start_seconds: number | null;
 	trim_end_seconds: number | null;
+	cuts: TimeRange[] | null;
+	suggested_cuts: SuggestedCuts | null;
+	optimized: boolean;
+	raw_object_key: string | null;
+	source: VideoSource;
+	first_view_notified_at: string | null;
 	created_at: string;
 	updated_at: string;
 }
 
 export const VIDEO_COLUMNS =
-	"id,owner_id,title,title_edited,status,visibility,password_hash,keep,duration_seconds,width,height,size_bytes,mime_type,object_key,thumbnail_key,upload_id,transcript_status,transcript_text,transcript_segments,summary,chapters,ai_status,view_count,folder_id,trim_start_seconds,trim_end_seconds,created_at,updated_at";
+	"id,owner_id,title,title_edited,status,visibility,password_hash,keep,duration_seconds,width,height,size_bytes,mime_type,object_key,thumbnail_key,upload_id,transcript_status,transcript_text,transcript_segments,summary,chapters,ai_status,view_count,folder_id,trim_start_seconds,trim_end_seconds,cuts,suggested_cuts,optimized,raw_object_key,source,first_view_notified_at,created_at,updated_at";
 
 export const adminClient = (env: Env): SupabaseClient => {
 	if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY)
@@ -59,6 +73,27 @@ export async function getVideo(db: SupabaseClient, id: string) {
 		.maybeSingle();
 	if (error) throw new Error(`Could not load video: ${error.message}`);
 	return (data as VideoRow | null) ?? null;
+}
+
+export async function createVideoRow(
+	db: SupabaseClient,
+	ownerId: string,
+	title: string | null,
+	source: VideoSource,
+) {
+	const row = {
+		owner_id: ownerId,
+		title: title ?? `Recording ${new Date().toISOString().slice(0, 10)}`,
+		source,
+	};
+	for (let attempt = 0; attempt < 3; attempt += 1) {
+		const id = newVideoId();
+		const { error } = await db.from("videos").insert({ id, ...row });
+		if (!error) return { id };
+		if (error.code !== "23505")
+			throw new Error(`Could not create video: ${error.message}`);
+	}
+	throw new Error("Could not allocate a video id");
 }
 
 export async function deleteVideoObjects(env: Env, video: VideoRow) {
@@ -98,6 +133,9 @@ export const videoTrim = (video: VideoRow) => ({
 	start: video.trim_start_seconds,
 	end: video.trim_end_seconds,
 });
+
+export const videoKept = (video: VideoRow) =>
+	visibleRanges(video.duration_seconds, videoTrim(video), video.cuts ?? []);
 
 export const isOpenVideo = (
 	video: Pick<VideoRow, "visibility" | "password_hash">,

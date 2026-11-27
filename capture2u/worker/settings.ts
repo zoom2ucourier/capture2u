@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS = {
 	TRANSCRIBE_MODEL: "assemblyai/universal-3.5-pro",
 	SUMMARY_MODEL: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
 	EMAIL_FROM: "no-reply@capture2u.locate2u.com",
+	EXTENSION_IDS: "hhfpocjeomimipncbdmnjjjlfaaobgic",
 } as const;
 
 const text = (value: unknown) =>
@@ -43,5 +44,6 @@ export function resolveEnv(raw: RawEnv, origin?: string): Env {
 		EMAIL_FROM: text(raw.EMAIL_FROM) || DEFAULT_SETTINGS.EMAIL_FROM,
 		SLACK_SIGNING_SECRET: text(raw.SLACK_SIGNING_SECRET),
 		SLACK_BOT_TOKEN: text(raw.SLACK_BOT_TOKEN),
+		EXTENSION_IDS: text(raw.EXTENSION_IDS) || DEFAULT_SETTINGS.EXTENSION_IDS,
 	};
 }

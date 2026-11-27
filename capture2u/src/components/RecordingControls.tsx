@@ -97,7 +97,15 @@ function ConfirmRow({
 	);
 }
 
-export function RecordingControls({ recorder }: { recorder: Recorder }) {
+type StopHandler = (clickedWindow?: Window | null) => void;
+
+export function RecordingControls({
+	recorder,
+	onStop,
+}: {
+	recorder: Recorder;
+	onStop: StopHandler;
+}) {
 	const { confirming, setConfirming, confirm } = useConfirming(recorder);
 	const recording = recorder.phase === "recording";
 
@@ -143,7 +151,7 @@ export function RecordingControls({ recorder }: { recorder: Recorder }) {
 				variant="primary"
 				size="lg"
 				startIcon={<Icons.Square />}
-				onClick={recorder.stop}
+				onClick={(event) => onStop(event.view as unknown as Window)}
 			>
 				Stop and share
 			</Button>
@@ -243,10 +251,12 @@ function CameraStage({
 
 export function FloatingControls({
 	recorder,
+	onStop,
 	cameraStream,
 	cameraPosition,
 }: {
 	recorder: Recorder;
+	onStop: StopHandler;
 	cameraStream: MediaStream | null;
 	cameraPosition: BubblePositionRef;
 }) {
@@ -332,7 +342,7 @@ export function FloatingControls({
 							<Button
 								variant="primary"
 								startIcon={<Icons.Square size={14} />}
-								onClick={recorder.stop}
+								onClick={(event) => onStop(event.view as unknown as Window)}
 							>
 								Stop
 							</Button>

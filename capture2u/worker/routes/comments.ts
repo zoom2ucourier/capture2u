@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Context, Hono } from "hono";
 import {
 	type CommentKind,
@@ -5,15 +6,22 @@ import {
 	type VideoComment,
 } from "../../shared/types";
 import { requireUser } from "../auth";
-import { profileNames } from "../db";
-import type { AppBindings } from "../env";
-import { isUuid } from "../lib/util";
+import { profileNames, type VideoRow } from "../db";
+import type { AppBindings, Env, SessionUser } from "../env";
+import {
+	escapeSlack,
+	sendSlackAlerts,
+	slackLink,
+	slackQuote,
+} from "../lib/slack";
+import { displayName, isUuid } from "../lib/util";
 import { loadWatchable } from "./watch";
 
 const MAX_COMMENT_LENGTH = 4000;
 const MAX_COMMENTS_PER_VIDEO = 1000;
+const MAX_MENTIONS = 20;
 const COMMENT_COLUMNS =
-	"id,video_id,author_id,parent_id,kind,body,timestamp_seconds,created_at";
+	"id,video_id,author_id,parent_id,kind,body,timestamp_seconds,mentions,created_at";
 
 interface CommentRow {
 	id: string;
@@ -23,6 +31,7 @@ interface CommentRow {
 	kind: CommentKind;
 	body: string;
 	timestamp_seconds: number | null;
+	mentions: string[] | null;
 	created_at: string;
 }
 
@@ -32,6 +41,7 @@ export function parseCommentInput(input: Record<string, unknown>):
 			body: string;
 			timestampSeconds: number | null;
 			parentId: string | null;
+			mentions: string[];
 	  }
 	| "invalid" {
 	const kind = input.kind === "emoji" ? "emoji" : "text";
@@ -61,7 +71,70 @@ export function parseCommentInput(input: Record<string, unknown>):
 		if (kind === "emoji" || !isUuid(input.parentId)) return "invalid";
 		parentId = input.parentId;
 	}
-	return { kind, body, timestampSeconds, parentId };
+
+	let mentions: string[] = [];
+	if (input.mentions !== null && input.mentions !== undefined) {
+		if (
+			kind === "emoji" ||
+			!Array.isArray(input.mentions) ||
+			input.mentions.length > MAX_MENTIONS ||
+			!input.mentions.every(isUuid)
+		)
+			return "invalid";
+		mentions = [...new Set(input.mentions.map((id) => id.toLowerCase()))];
+	}
+	return { kind, body, timestampSeconds, parentId, mentions };
+}
+
+// One message per person, for the most specific reason they are involved:
+// being mentioned beats being replied to, which beats owning the video.
+export function commentAlerts(input: {
+	authorId: string;
+	ownerId: string;
+	parentAuthorId: string | null;
+	mentions: string[];
+}) {
+	const alerts = new Map<string, "mention" | "reply" | "comment">();
+	if (input.ownerId !== input.authorId) alerts.set(input.ownerId, "comment");
+	if (input.parentAuthorId && input.parentAuthorId !== input.authorId)
+		alerts.set(input.parentAuthorId, "reply");
+	for (const id of input.mentions)
+		if (id !== input.authorId) alerts.set(id, "mention");
+	return alerts;
+}
+
+async function alertAboutComment(
+	env: Env,
+	db: SupabaseClient,
+	video: VideoRow,
+	author: SessionUser,
+	comment: { body: string; parentAuthorId: string | null; mentions: string[] },
+) {
+	const alerts = commentAlerts({
+		authorId: author.id,
+		ownerId: video.owner_id,
+		parentAuthorId: comment.parentAuthorId,
+		mentions: comment.mentions,
+	});
+	const name = escapeSlack(displayName(author.fullName, author.email));
+	const link = slackLink(`${env.PUBLIC_BASE_URL}/v/${video.id}`, video.title);
+	const quote = slackQuote(comment.body);
+	const lead = {
+		mention: `:speech_balloon: *${name}* mentioned you in a comment on ${link}`,
+		reply: `:speech_balloon: *${name}* replied to your comment on ${link}`,
+		comment: `:speech_balloon: *${name}* commented on ${link}`,
+	};
+	for (const reason of ["mention", "reply", "comment"] as const) {
+		const recipients = [...alerts]
+			.filter(([, why]) => why === reason)
+			.map(([id]) => id);
+		await sendSlackAlerts(
+			env,
+			db,
+			recipients,
+			[lead[reason], quote].join("\n"),
+		);
+	}
 }
 
 export const comments = new Hono<AppBindings>();
@@ -90,7 +163,7 @@ comments.get("/:videoId", async (c) => {
 	const rows = (data ?? []) as CommentRow[];
 	const names = await profileNames(
 		db,
-		rows.map((row) => row.author_id),
+		rows.flatMap((row) => [row.author_id, ...(row.mentions ?? [])]),
 	);
 	const canModerate = video.owner_id === user.id || user.role === "admin";
 
@@ -104,6 +177,10 @@ comments.get("/:videoId", async (c) => {
 		authorName: names.get(row.author_id) ?? "Someone",
 		isMine: row.author_id === user.id,
 		canDelete: canModerate || row.author_id === user.id,
+		mentions: (row.mentions ?? []).flatMap((id) => {
+			const name = names.get(id);
+			return name ? [{ id, name }] : [];
+		}),
 	}));
 	return c.json({ comments: result }, 200, {
 		"Cache-Control": "private, no-store",
@@ -142,10 +219,11 @@ comments.post("/:videoId", async (c) => {
 		}
 	}
 
+	let parentAuthorId: string | null = null;
 	if (input.parentId) {
 		const { data: parent } = await db
 			.from("comments")
-			.select("id,video_id,parent_id,kind")
+			.select("id,video_id,parent_id,kind,author_id")
 			.eq("id", input.parentId)
 			.maybeSingle();
 		if (
@@ -155,6 +233,18 @@ comments.post("/:videoId", async (c) => {
 			parent.kind !== "text"
 		)
 			return c.json({ error: "invalid_comment" }, 400);
+		parentAuthorId = parent.author_id as string;
+	}
+
+	let mentions: string[] = [];
+	if (input.mentions.length > 0) {
+		const { data: known, error: mentionError } = await db
+			.from("profiles")
+			.select("id")
+			.in("id", input.mentions);
+		if (mentionError)
+			throw new Error(`Could not load mentions: ${mentionError.message}`);
+		mentions = (known ?? []).map((row) => row.id as string);
 	}
 
 	const { count, error: countError } = await db
@@ -173,11 +263,21 @@ comments.post("/:videoId", async (c) => {
 		kind: input.kind,
 		body: input.body,
 		timestamp_seconds: input.timestampSeconds,
+		mentions,
 	});
 	if (error) {
 		if (error.code === "23505") return c.json({ created: true });
 		throw new Error(`Could not save comment: ${error.message}`);
 	}
+
+	if (input.kind === "text")
+		c.executionCtx.waitUntil(
+			alertAboutComment(c.env, db, video, user, {
+				body: input.body,
+				parentAuthorId,
+				mentions,
+			}).catch((cause) => console.error("[capture2u] comment alert", cause)),
+		);
 
 	return c.json({ created: true });
 });

@@ -1,9 +1,9 @@
 import { Hono } from "hono";
-import { adminClient, getVideo, isOpenVideo, videoTrim } from "../db";
+import { adminClient, getVideo, isOpenVideo, videoKept } from "../db";
 import type { AppBindings } from "../env";
 import { verifyToken } from "../lib/tokens";
 import { segmentsToVtt } from "../lib/transcript";
-import { isVideoId, parseRangeHeader, withinTrim } from "../lib/util";
+import { isVideoId, parseRangeHeader, visibleSegments } from "../lib/util";
 
 export const media = new Hono<AppBindings>();
 
@@ -25,8 +25,16 @@ media.on(["GET", "HEAD"], "/:id/video", async (c) => {
 	if (!video?.object_key || video.status !== "ready")
 		return c.json({ error: "not_found" }, 404);
 
-	const head = await c.env.VIDEOS.head(video.object_key);
-	if (!head) return c.json({ error: "not_found" }, 404);
+	// A viewer who started on the first upload keeps reading that same file
+	// after the seekable copy replaces it, because the two differ byte for byte.
+	const wantsFirstUpload = c.req.query("f") === "r" && video.raw_object_key;
+	let objectKey = wantsFirstUpload ? video.raw_object_key : video.object_key;
+	let head = objectKey ? await c.env.VIDEOS.head(objectKey) : null;
+	if (!head && wantsFirstUpload) {
+		objectKey = video.object_key;
+		head = await c.env.VIDEOS.head(objectKey);
+	}
+	if (!head || !objectKey) return c.json({ error: "not_found" }, 404);
 
 	const headers = new Headers({
 		"Content-Type":
@@ -36,7 +44,7 @@ media.on(["GET", "HEAD"], "/:id/video", async (c) => {
 		"Cache-Control": "private, max-age=3600",
 	});
 	if (c.req.query("download") === "1") {
-		const extension = video.object_key.endsWith(".webm") ? "webm" : "mp4";
+		const extension = /\.(webm|mov|m4v)$/.exec(objectKey)?.[1] ?? "mp4";
 		const safeTitle =
 			video.title
 				.replace(/[^\w\- ]+/g, "")
@@ -60,7 +68,7 @@ media.on(["GET", "HEAD"], "/:id/video", async (c) => {
 	}
 
 	const object = await c.env.VIDEOS.get(
-		video.object_key,
+		objectKey,
 		range ? { range } : undefined,
 	);
 	if (!object) return c.json({ error: "not_found" }, 404);
@@ -111,7 +119,7 @@ media.get("/:id/captions.vtt", async (c) => {
 		return c.json({ error: "forbidden" }, 403);
 	const video = await getVideo(adminClient(c.env), id);
 	const segments = video
-		? withinTrim(video.transcript_segments ?? [], videoTrim(video))
+		? visibleSegments(video.transcript_segments ?? [], videoKept(video))
 		: [];
 	if (segments.length === 0) return c.json({ error: "not_found" }, 404);
 	return new Response(segmentsToVtt(segments), {

@@ -14,10 +14,12 @@ import { isVideoId, videoObjectPrefix } from "../lib/util";
 const PART_TOKEN_TTL_SECONDS = 60 * 60;
 const MAX_PARTS = 2000;
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
-const SUBPATH_PATTERN = /^video\.(mp4|webm)$/;
+const SUBPATH_PATTERN = /^(?:video|raw-upload|upload)\.(mp4|webm|mov|m4v)$/;
 const CONTENT_TYPES: Record<string, string> = {
 	mp4: "video/mp4",
 	webm: "video/webm",
+	mov: "video/quicktime",
+	m4v: "video/mp4",
 };
 
 const partSubject = (videoId: string, uploadId: string, partNumber: number) =>
@@ -80,6 +82,7 @@ upload.post("/multipart/initiate", requireUser, async (c) => {
 		.update({
 			upload_id: multipart.uploadId,
 			object_key: key,
+			raw_object_key: null,
 			mime_type: contentType,
 			status: "uploading",
 		})
@@ -204,6 +207,8 @@ upload.post("/multipart/complete", requireUser, async (c) => {
 			: null;
 	const width = numberOrNull(body.width);
 	const height = numberOrNull(body.height);
+	const needsSeekableCopy =
+		video.object_key.endsWith(".mp4") && body.seekable !== true;
 
 	const { error } = await adminClient(c.env)
 		.from("videos")
@@ -214,6 +219,7 @@ upload.post("/multipart/complete", requireUser, async (c) => {
 			duration_seconds: numberOrNull(body.durationInSecs),
 			width: width === null ? null : Math.round(width),
 			height: height === null ? null : Math.round(height),
+			optimized: !needsSeekableCopy,
 			transcript_status: "pending",
 			ai_status: "pending",
 		})
@@ -222,11 +228,14 @@ upload.post("/multipart/complete", requireUser, async (c) => {
 
 	let processingStarted = true;
 	try {
-		await c.env.JOBS.send({
-			type: "process-video",
-			videoId: video.id,
-			origin: new URL(c.req.url).origin,
-		});
+		const origin = new URL(c.req.url).origin;
+		if (needsSeekableCopy)
+			await c.env.JOBS.send({
+				type: "optimize-video",
+				videoId: video.id,
+				origin,
+			});
+		await c.env.JOBS.send({ type: "process-video", videoId: video.id, origin });
 	} catch (queueError) {
 		processingStarted = false;
 		console.error("Could not queue processing", queueError);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { Visibility, WatchVideo } from "../../shared/types";
+import { keptRanges, shownDuration, toVirtual } from "../../shared/timeline";
+import type { TimeRange, Visibility, WatchVideo } from "../../shared/types";
 import { useAuth } from "../auth";
 import { Comments } from "../components/Comments";
 import { Button, ButtonAnchor, ButtonLink } from "../components/common/Button";
@@ -12,6 +13,7 @@ import {
 	StatusBadge,
 } from "../components/common/Feedback";
 import { Icons } from "../components/common/Icons";
+import { EditControl } from "../components/EditControl";
 import { AppHeader } from "../components/layout/AppHeader";
 import { GateCard } from "../components/layout/GateCard";
 import { Player, type PlayerHandle } from "../components/Player";
@@ -29,22 +31,28 @@ type LoadState =
 
 const unlockKey = (id: string) => `capture2u-unlock-${id}`;
 
+const SEEKABLE_COPY_WAIT_MS = 15 * 60 * 1000;
+
+const awaitingSeekableCopy = (video: WatchVideo) =>
+	video.status === "ready" &&
+	!video.optimized &&
+	Date.now() - new Date(video.createdAt).getTime() < SEEKABLE_COPY_WAIT_MS;
+
 const isSettled = (video: WatchVideo) =>
 	video.status !== "uploading" &&
 	video.transcriptStatus !== "pending" &&
 	video.transcriptStatus !== "processing" &&
 	video.aiStatus !== "pending" &&
-	video.aiStatus !== "processing";
+	video.aiStatus !== "processing" &&
+	!awaitingSeekableCopy(video);
 
-const visibleDuration = (video: WatchVideo) => {
-	if (!video.isOwner || video.durationSeconds === null)
-		return video.durationSeconds;
-	return Math.max(
-		0,
-		Math.min(video.trimEnd ?? video.durationSeconds, video.durationSeconds) -
-			(video.trimStart ?? 0),
-	);
-};
+const UNKNOWN_DURATION_SECONDS = 10 * 86_400;
+const NO_CUTS: TimeRange[] = [];
+
+const fileVersion = (playback: WatchVideo["playback"]) =>
+	playback
+		? new URL(playback.videoUrl, "http://x").searchParams.get("f")
+		: null;
 
 const embedCode = (id: string, title: string) =>
 	`<iframe src="${window.location.origin}/embed/${id}" title="${title
@@ -64,6 +72,7 @@ export function Watch() {
 	const [copied, setCopied] = useState<"link" | "embed" | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 	const [editingTrim, setEditingTrim] = useState(false);
+	const [draftCuts, setDraftCuts] = useState<TimeRange[]>(NO_CUTS);
 	const [commentSignIn, setCommentSignIn] = useState(false);
 	const playerRef = useRef<PlayerHandle | null>(null);
 	const [retrying, setRetrying] = useState(false);
@@ -80,8 +89,12 @@ export function Watch() {
 					headers: unlockToken ? { "x-unlock-token": unlockToken } : {},
 				});
 				// Keep the same signed media address across refreshes so the
-				// player is not reloaded mid-playback.
-				if (playbackRef.current && video.playback)
+				// player is not reloaded mid-playback. The one exception is the
+				// seekable copy arriving before anyone has pressed play.
+				const seekableArrived =
+					!viewSentRef.current &&
+					fileVersion(playbackRef.current) !== fileVersion(video.playback);
+				if (playbackRef.current && video.playback && !seekableArrived)
 					video.playback = playbackRef.current;
 				else playbackRef.current = video.playback;
 				setState({ kind: "ready", video });
@@ -242,6 +255,14 @@ export function Watch() {
 
 	const current = state.video;
 	const ownerName = current.ownerName ?? "Unknown";
+	const kept = keptRanges(
+		UNKNOWN_DURATION_SECONDS,
+		current.trimStart,
+		current.trimEnd,
+		current.cuts,
+	);
+	const shownTime = (seconds: number) =>
+		formatDuration(editingTrim ? seconds : toVirtual(kept, seconds));
 	return (
 		<div className="app">
 			<AppHeader>
@@ -268,7 +289,9 @@ export function Watch() {
 								playback={current.playback}
 								trimStart={editingTrim ? null : current.trimStart}
 								trimEnd={editingTrim ? null : current.trimEnd}
-								durationSeconds={current.durationSeconds}
+								cuts={editingTrim ? NO_CUTS : current.cuts}
+								markers={editingTrim ? draftCuts : NO_CUTS}
+								visibleSeconds={shownDuration(current)}
 								onFirstPlay={recordView}
 							/>
 						) : (
@@ -298,8 +321,7 @@ export function Watch() {
 								<p className="watch__owner">{ownerName}</p>
 								<p className="watch__details">
 									{formatDate(current.createdAt)} ·{" "}
-									{formatDuration(visibleDuration(current))} ·{" "}
-									{current.viewCount}{" "}
+									{formatDuration(shownDuration(current))} · {current.viewCount}{" "}
 									{current.viewCount === 1 ? "view" : "views"}
 								</p>
 							</div>
@@ -378,18 +400,17 @@ export function Watch() {
 								}
 							/>
 							{current.playback && (
-								<TrimControl
-									key={`${current.trimStart}-${current.trimEnd}`}
+								<EditControl
+									key={`${current.trimStart}-${current.trimEnd}-${current.cuts.length}`}
 									video={current}
 									editing={editingTrim}
 									getCurrentTime={currentTime}
 									onEditingChange={setEditingTrim}
-									onSave={async (trim) => {
+									onDraftCutsChange={setDraftCuts}
+									onSave={async (edits, done) => {
 										const saved = await patch(
-											{ trim },
-											trim.start === null && trim.end === null
-												? "Trim removed"
-												: "Trim saved",
+											{ trim: edits.trim, cuts: edits.cuts },
+											done,
 										);
 										if (saved) setEditingTrim(false);
 									}}
@@ -432,6 +453,7 @@ export function Watch() {
 							unlockToken={sessionStorage.getItem(unlockKey(id))}
 							getCurrentTime={currentTime}
 							onSeek={seek}
+							formatTime={shownTime}
 						/>
 					) : (
 						<Card title="Comments" icon={<Icons.MessageSquare />}>
@@ -511,7 +533,7 @@ export function Watch() {
 											onClick={() => seek(chapter.start)}
 										>
 											<span className="timeline__time">
-												{formatDuration(chapter.start)}
+												{shownTime(chapter.start)}
 											</span>
 											<span className="timeline__text timeline__text--strong">
 												{chapter.title}
@@ -537,7 +559,7 @@ export function Watch() {
 											onClick={() => seek(segment.start)}
 										>
 											<span className="timeline__time">
-												{formatDuration(segment.start)}
+												{shownTime(segment.start)}
 											</span>
 											<span className="timeline__text">{segment.text}</span>
 										</button>
@@ -605,96 +627,6 @@ function TitleEditor({
 				if (event.key === "Enter") event.currentTarget.blur();
 			}}
 		/>
-	);
-}
-
-function TrimControl({
-	video,
-	editing,
-	getCurrentTime,
-	onEditingChange,
-	onSave,
-}: {
-	video: WatchVideo;
-	editing: boolean;
-	getCurrentTime: () => number;
-	onEditingChange: (editing: boolean) => void;
-	onSave: (trim: { start: number | null; end: number | null }) => void;
-}) {
-	const [start, setStart] = useState(video.trimStart);
-	const [end, setEnd] = useState(video.trimEnd);
-	const trimmed = video.trimStart !== null || video.trimEnd !== null;
-	const mark = () => Math.round(getCurrentTime() * 10) / 10;
-
-	if (!editing)
-		return (
-			<div className="field">
-				<span className="field__label">Trim</span>
-				<p className="field__hint">
-					{trimmed
-						? `Viewers see ${formatDuration(video.trimStart ?? 0)} to ${formatDuration(video.trimEnd ?? video.durationSeconds)}. The rest is hidden, not deleted.`
-						: "Hide the start or the end of this video from viewers."}
-				</p>
-				<div className="field__row">
-					<Button
-						size="sm"
-						startIcon={<Icons.Scissors size={14} />}
-						onClick={() => {
-							setStart(video.trimStart);
-							setEnd(video.trimEnd);
-							onEditingChange(true);
-						}}
-					>
-						{trimmed ? "Change trim" : "Trim"}
-					</Button>
-					{trimmed && (
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={() => onSave({ start: null, end: null })}
-						>
-							Remove trim
-						</Button>
-					)}
-				</div>
-			</div>
-		);
-
-	return (
-		<div className="field field--editing">
-			<span className="field__label">Trim</span>
-			<p className="field__hint">
-				Play or drag the video to the moment you want, then press a button.
-			</p>
-			<div className="field__row">
-				<Button size="sm" onClick={() => setStart(mark())}>
-					Start here
-				</Button>
-				<Button size="sm" onClick={() => setEnd(mark())}>
-					End here
-				</Button>
-			</div>
-			<p className="field__value">
-				Starts at {formatDuration(start ?? 0)} · Ends at{" "}
-				{formatDuration(end ?? video.durationSeconds)}
-			</p>
-			<div className="field__row">
-				<Button
-					variant="primary"
-					size="sm"
-					onClick={() => onSave({ start, end })}
-				>
-					Save trim
-				</Button>
-				<Button
-					variant="ghost"
-					size="sm"
-					onClick={() => onEditingChange(false)}
-				>
-					Cancel
-				</Button>
-			</div>
-		</div>
 	);
 }
 

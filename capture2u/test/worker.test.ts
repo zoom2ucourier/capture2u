@@ -320,10 +320,11 @@ describe("transcripts", () => {
 		expect(normalizeTranscript(null, { timesInMilliseconds: false })).toEqual({
 			text: "",
 			segments: [],
+			words: [],
 		});
 		expect(
 			normalizeTranscript({ foo: 1 }, { timesInMilliseconds: false }),
-		).toEqual({ text: "", segments: [] });
+		).toEqual({ text: "", segments: [], words: [] });
 	});
 
 	it("writes valid caption timings", () => {

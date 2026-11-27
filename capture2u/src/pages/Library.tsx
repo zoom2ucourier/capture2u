@@ -1,11 +1,20 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import type { Folder, LibraryVideo } from "../../shared/types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import type { AccountSettings, Folder, LibraryVideo } from "../../shared/types";
+import { UPLOAD_ACCEPT, uploadFileProblem } from "../../shared/uploads";
 import { Button, ButtonLink } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { Alert, EmptyState, LoadingState } from "../components/common/Feedback";
 import { Icons } from "../components/common/Icons";
-import { ApiRequestError, api, formatDate, formatDuration } from "../lib/api";
+import { RecoveryBanner } from "../components/RecoveryBanner";
+import {
+	ApiRequestError,
+	api,
+	formatDate,
+	formatDuration,
+	getConfig,
+} from "../lib/api";
+import { uploadVideoFile } from "../recorder/fileUpload";
 
 const VISIBILITY_LABEL: Record<LibraryVideo["visibility"], string> = {
 	public: "Anyone with the link",
@@ -33,6 +42,61 @@ export function Library() {
 	const [query, setQuery] = useState("");
 	const [newFolder, setNewFolder] = useState("");
 	const [error, setError] = useState<string | null>(null);
+	const [uploading, setUploading] = useState<{
+		name: string;
+		progress: number;
+	} | null>(null);
+	const [slackAlerts, setSlackAlerts] = useState<boolean | null>(null);
+	const fileInputRef = useRef<HTMLInputElement | null>(null);
+	const navigate = useNavigate();
+
+	useEffect(() => {
+		let cancelled = false;
+		getConfig()
+			.then(async (config) => {
+				if (!config.slackAlerts) return;
+				const result = await api<{ settings: AccountSettings }>("/api/account");
+				if (!cancelled) setSlackAlerts(result.settings.slackAlerts);
+			})
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	const toggleSlackAlerts = async () => {
+		if (slackAlerts === null) return;
+		const next = !slackAlerts;
+		setSlackAlerts(next);
+		try {
+			await api("/api/account", {
+				method: "PATCH",
+				body: { slackAlerts: next },
+			});
+		} catch {
+			setSlackAlerts(!next);
+			setError("Could not change your Slack alerts.");
+		}
+	};
+
+	const uploadFile = async (file: File | undefined) => {
+		if (!file || uploading) return;
+		const problem = uploadFileProblem(file);
+		if (problem) return setError(problem);
+		setError(null);
+		setUploading({ name: file.name, progress: 0 });
+		try {
+			const video = await uploadVideoFile(file, (progress) =>
+				setUploading({ name: file.name, progress }),
+			);
+			navigate(`/v/${video.id}`);
+		} catch {
+			setError(
+				"That video could not be uploaded. Check your connection and try again.",
+			);
+			setUploading(null);
+		}
+	};
 
 	const loadFolders = useCallback(async () => {
 		try {
@@ -189,7 +253,52 @@ export function Library() {
 					</div>
 					<Button type="submit">Search</Button>
 				</form>
+				<div className="page-head__actions">
+					<input
+						ref={fileInputRef}
+						className="visually-hidden"
+						type="file"
+						accept={UPLOAD_ACCEPT}
+						aria-label="Choose a video to upload"
+						tabIndex={-1}
+						onChange={(event) => {
+							void uploadFile(event.target.files?.[0]);
+							event.target.value = "";
+						}}
+					/>
+					<Button
+						startIcon={<Icons.Upload />}
+						disabled={uploading !== null}
+						onClick={() => fileInputRef.current?.click()}
+					>
+						Upload video
+					</Button>
+					{slackAlerts !== null && (
+						<Button
+							variant="ghost"
+							aria-pressed={slackAlerts}
+							title="Get a Slack message when someone watches, comments or mentions you"
+							startIcon={slackAlerts ? <Icons.Bell /> : <Icons.BellOff />}
+							onClick={() => void toggleSlackAlerts()}
+						>
+							{slackAlerts ? "Slack alerts on" : "Slack alerts off"}
+						</Button>
+					)}
+				</div>
 			</div>
+
+			<RecoveryBanner />
+
+			{uploading && (
+				<Card title="Uploading your video" icon={<Icons.Upload />}>
+					<p className="field__value">{uploading.name}</p>
+					<progress className="progress" value={uploading.progress} max={1} />
+					<p className="field__hint">
+						Uploading {Math.round(uploading.progress * 100)}%. Keep this tab
+						open until it finishes.
+					</p>
+				</Card>
+			)}
 
 			<div className="folder-bar">
 				<button

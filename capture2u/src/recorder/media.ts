@@ -68,6 +68,29 @@ export async function toSeekableMp4(source: Blob): Promise<Blob> {
 const MAX_THUMBNAIL_WIDTH = 1280;
 const MAX_THUMBNAIL_HEIGHT = 720;
 
+function frameToJpeg(video: HTMLVideoElement): Promise<Blob | null> {
+	return new Promise((resolve) => {
+		try {
+			const width = video.videoWidth || 1280;
+			const height = video.videoHeight || 720;
+			const scale = Math.min(
+				MAX_THUMBNAIL_WIDTH / width,
+				MAX_THUMBNAIL_HEIGHT / height,
+				1,
+			);
+			const canvas = document.createElement("canvas");
+			canvas.width = Math.round(width * scale);
+			canvas.height = Math.round(height * scale);
+			const context = canvas.getContext("2d");
+			if (!context) return resolve(null);
+			context.drawImage(video, 0, 0, canvas.width, canvas.height);
+			canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.72);
+		} catch {
+			resolve(null);
+		}
+	});
+}
+
 export function captureThumbnail(source: Blob): Promise<Blob | null> {
 	return new Promise((resolve) => {
 		const video = document.createElement("video");
@@ -91,32 +114,85 @@ export function captureThumbnail(source: Blob): Promise<Blob | null> {
 			"loadeddata",
 			() => {
 				const duration = Number.isFinite(video.duration) ? video.duration : 0;
-				video.currentTime = duration > 0 ? Math.min(1, duration / 4) : 0;
+				const target = duration > 0 ? Math.min(1, duration / 4) : 0;
+				if (target === 0) void frameToJpeg(video).then(finish);
+				else video.currentTime = target;
 			},
 			{ once: true },
 		);
 		video.addEventListener(
 			"seeked",
-			() => {
-				try {
-					const width = video.videoWidth || 1280;
-					const height = video.videoHeight || 720;
-					const scale = Math.min(
-						MAX_THUMBNAIL_WIDTH / width,
-						MAX_THUMBNAIL_HEIGHT / height,
-						1,
-					);
-					const canvas = document.createElement("canvas");
-					canvas.width = Math.round(width * scale);
-					canvas.height = Math.round(height * scale);
-					const context = canvas.getContext("2d");
-					if (!context) return finish(null);
-					context.drawImage(video, 0, 0, canvas.width, canvas.height);
-					canvas.toBlob((blob) => finish(blob), "image/jpeg", 0.72);
-				} catch {
-					finish(null);
-				}
-			},
+			() => void frameToJpeg(video).then(finish),
+			{ once: true },
+		);
+	});
+}
+
+// Taken from the picture as it is being recorded, so the thumbnail is ready
+// before the upload finishes and includes the camera circle.
+export function captureTrackThumbnail(
+	track: MediaStreamTrack,
+): Promise<Blob | null> {
+	return new Promise((resolve) => {
+		if (track.readyState !== "live") return resolve(null);
+		const video = document.createElement("video");
+		video.muted = true;
+		video.playsInline = true;
+		video.srcObject = new MediaStream([track]);
+
+		let settled = false;
+		const finish = (result: Blob | null) => {
+			if (settled) return;
+			settled = true;
+			window.clearTimeout(timeout);
+			video.pause();
+			video.srcObject = null;
+			resolve(result);
+		};
+		const timeout = window.setTimeout(() => finish(null), 8_000);
+		video.addEventListener("error", () => finish(null), { once: true });
+		video.addEventListener(
+			"loadeddata",
+			() => void frameToJpeg(video).then(finish),
+			{ once: true },
+		);
+		void video.play().catch(() => undefined);
+	});
+}
+
+export interface VideoFileInfo {
+	durationSeconds?: number;
+	width?: number;
+	height?: number;
+}
+
+export function probeVideoFile(source: Blob): Promise<VideoFileInfo> {
+	return new Promise((resolve) => {
+		const video = document.createElement("video");
+		const url = URL.createObjectURL(source);
+		video.muted = true;
+		video.preload = "metadata";
+		video.src = url;
+		const finish = (info: VideoFileInfo) => {
+			window.clearTimeout(timeout);
+			video.removeAttribute("src");
+			video.load();
+			URL.revokeObjectURL(url);
+			resolve(info);
+		};
+		const timeout = window.setTimeout(() => finish({}), 10_000);
+		video.addEventListener("error", () => finish({}), { once: true });
+		video.addEventListener(
+			"loadedmetadata",
+			() =>
+				finish({
+					durationSeconds:
+						Number.isFinite(video.duration) && video.duration > 0
+							? video.duration
+							: undefined,
+					width: video.videoWidth || undefined,
+					height: video.videoHeight || undefined,
+				}),
 			{ once: true },
 		);
 	});

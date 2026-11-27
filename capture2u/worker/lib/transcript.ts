@@ -1,4 +1,9 @@
-import type { Chapter, TranscriptSegment } from "../../shared/types";
+import { mergeRanges, type TimeRange } from "../../shared/timeline";
+import type {
+	Chapter,
+	SuggestedCuts,
+	TranscriptSegment,
+} from "../../shared/types";
 
 const asNumber = (value: unknown) =>
 	typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -10,10 +15,72 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
 
 const SEGMENT_TARGET_SECONDS = 8;
 
-interface TimedWord {
+export interface TimedWord {
 	text: string;
 	start: number;
 	end: number;
+}
+
+const FILLER_PATTERN = /^(?:u+h+|u+m+|u+h+m+|e+r+m*|a+h+|h+m+|m+-?h+m+|mm+)$/;
+const MAX_FILLER_SECONDS = 1.5;
+
+export const isFillerWord = (word: TimedWord) =>
+	word.end - word.start <= MAX_FILLER_SECONDS &&
+	FILLER_PATTERN.test(word.text.toLowerCase().replace(/[^a-z-]/g, ""));
+
+const SILENCE_MIN_SECONDS = 2;
+const SILENCE_PADDING_SECONDS = 0.3;
+const FILLER_PADDING_SECONDS = 0.03;
+const MIN_SUGGESTED_SILENCE_SECONDS = 1;
+const MAX_SUGGESTIONS = 300;
+
+// Suggestions only: a pause is a stretch with no speech, and in a screen
+// recording that can be the presenter showing something without talking, so
+// nothing is hidden until the owner asks for it.
+export function suggestCuts(
+	words: TimedWord[],
+	durationSeconds: number | null,
+): SuggestedCuts {
+	const spoken = words.filter((word) => !isFillerWord(word));
+	const silences: TimeRange[] = [];
+	const first = spoken[0];
+	const last = spoken[spoken.length - 1];
+	if (first && last) {
+		if (first.start >= SILENCE_MIN_SECONDS)
+			silences.push({ start: 0, end: first.start - SILENCE_PADDING_SECONDS });
+		for (let index = 1; index < spoken.length; index += 1) {
+			const previous = spoken[index - 1];
+			const current = spoken[index];
+			if (
+				previous &&
+				current &&
+				current.start - previous.end >= SILENCE_MIN_SECONDS
+			)
+				silences.push({
+					start: previous.end + SILENCE_PADDING_SECONDS,
+					end: current.start - SILENCE_PADDING_SECONDS,
+				});
+		}
+		if (
+			durationSeconds !== null &&
+			durationSeconds - last.end >= SILENCE_MIN_SECONDS
+		)
+			silences.push({
+				start: last.end + SILENCE_PADDING_SECONDS,
+				end: durationSeconds,
+			});
+	}
+	const fillers = words.filter(isFillerWord).map((word) => ({
+		start: Math.max(0, word.start - FILLER_PADDING_SECONDS),
+		end: word.end + FILLER_PADDING_SECONDS,
+	}));
+	return {
+		silences: mergeRanges(silences, MIN_SUGGESTED_SILENCE_SECONDS).slice(
+			0,
+			MAX_SUGGESTIONS,
+		),
+		fillers: mergeRanges(fillers).slice(0, MAX_SUGGESTIONS),
+	};
 }
 
 function groupWords(words: TimedWord[]): TranscriptSegment[] {
@@ -46,13 +113,32 @@ function groupWords(words: TimedWord[]): TranscriptSegment[] {
 	return segments;
 }
 
+function readWords(entries: unknown, scale: number): TimedWord[] {
+	if (!Array.isArray(entries)) return [];
+	const words: TimedWord[] = [];
+	for (const entry of entries) {
+		const item = asRecord(entry);
+		const start = asNumber(item?.start);
+		const end = asNumber(item?.end);
+		const text =
+			typeof item?.text === "string"
+				? item.text
+				: typeof item?.word === "string"
+					? item.word
+					: "";
+		if (start === null || end === null || end < start || !text.trim()) continue;
+		words.push({ text: text.trim(), start: start * scale, end: end * scale });
+	}
+	return words;
+}
+
 // Speech models return different shapes: Whisper gives `segments` in seconds,
 // AssemblyAI gives `words` in milliseconds. Anything else falls back to one
 // untimed block so a transcript is never lost to a shape change.
 export function normalizeTranscript(
 	raw: unknown,
 	options: { timesInMilliseconds: boolean; durationSeconds?: number | null },
-): { text: string; segments: TranscriptSegment[] } {
+): { text: string; segments: TranscriptSegment[]; words: TimedWord[] } {
 	const root = asRecord(raw) ?? {};
 	const body = asRecord(root.result) ?? asRecord(root.response) ?? root;
 	const scale = options.timesInMilliseconds ? 1 / 1000 : 1;
@@ -60,6 +146,7 @@ export function normalizeTranscript(
 	const rawSegments = Array.isArray(body.segments) ? body.segments : null;
 	if (rawSegments && rawSegments.length > 0) {
 		const segments: TranscriptSegment[] = [];
+		const words: TimedWord[] = [];
 		for (const entry of rawSegments) {
 			const item = asRecord(entry);
 			const start = asNumber(item?.start);
@@ -67,6 +154,7 @@ export function normalizeTranscript(
 			const text = typeof item?.text === "string" ? item.text.trim() : "";
 			if (start === null || end === null || !text) continue;
 			segments.push({ start: start * scale, end: end * scale, text });
+			words.push(...readWords(item?.words, scale));
 		}
 		if (segments.length > 0) {
 			return {
@@ -75,43 +163,32 @@ export function normalizeTranscript(
 						? body.text.trim()
 						: segments.map((segment) => segment.text).join(" "),
 				segments,
+				words: words.length > 0 ? words : readWords(body.words, scale),
 			};
 		}
 	}
 
-	const rawWords = Array.isArray(body.words) ? body.words : null;
-	if (rawWords && rawWords.length > 0) {
-		const words: TimedWord[] = [];
-		for (const entry of rawWords) {
-			const item = asRecord(entry);
-			const start = asNumber(item?.start);
-			const end = asNumber(item?.end);
-			const text =
-				typeof item?.text === "string"
-					? item.text
-					: typeof item?.word === "string"
-						? item.word
-						: "";
-			if (start === null || end === null || !text.trim()) continue;
-			words.push({ text: text.trim(), start: start * scale, end: end * scale });
-		}
-		if (words.length > 0) {
-			const segments = groupWords(words);
-			return {
-				text:
-					typeof body.text === "string" && body.text.trim()
-						? body.text.trim()
-						: segments.map((segment) => segment.text).join(" "),
-				segments,
-			};
-		}
+	const words = readWords(body.words, scale);
+	if (words.length > 0) {
+		const spoken = words.filter((word) => !isFillerWord(word));
+		const segments = groupWords(spoken);
+		const hadFillers = spoken.length !== words.length;
+		return {
+			text:
+				!hadFillers && typeof body.text === "string" && body.text.trim()
+					? body.text.trim()
+					: segments.map((segment) => segment.text).join(" "),
+			segments,
+			words,
+		};
 	}
 
 	const text = typeof body.text === "string" ? body.text.trim() : "";
-	if (!text) return { text: "", segments: [] };
+	if (!text) return { text: "", segments: [], words: [] };
 	return {
 		text,
 		segments: [{ start: 0, end: options.durationSeconds ?? 0, text }],
+		words: [],
 	};
 }
 

@@ -12,9 +12,12 @@ import {
 	displayName,
 	embedHtml,
 	isUuid,
+	normalizeCuts,
 	normalizeTrim,
-	trimmedDuration,
-	withinTrim,
+	visibleChapters,
+	visibleDuration,
+	visibleRanges,
+	visibleSegments,
 } from "../worker/lib/util";
 import { parseCommentInput } from "../worker/routes/comments";
 import { parseFolderName } from "../worker/routes/folders";
@@ -103,27 +106,108 @@ describe("trim", () => {
 			{ start: 20, end: 25, text: "inside" },
 			{ start: 61, end: 70, text: "after" },
 		];
+		const trimmed = visibleRanges(120, { start: 5, end: 60 }, []);
+		expect(visibleSegments(segments, trimmed).map((item) => item.text)).toEqual(
+			["overlaps start", "inside"],
+		);
 		expect(
-			withinTrim(segments, { start: 5, end: 60 }).map((item) => item.text),
-		).toEqual(["overlaps start", "inside"]);
-		expect(withinTrim(segments, { start: null, end: null })).toBe(segments);
+			visibleSegments(
+				segments,
+				visibleRanges(120, { start: null, end: null }, []),
+			),
+		).toEqual(segments);
 		expect(
-			withinTrim(
+			visibleChapters(
 				[
 					{ title: "Intro", start: 0 },
 					{ title: "Demo", start: 30 },
 					{ title: "Wrap", start: 90 },
 				],
-				{ start: 5, end: 60 },
+				trimmed,
 			).map((item) => item.title),
-		).toEqual(["Demo"]);
+		).toEqual(["Intro", "Demo"]);
 	});
 
 	it("reports the length viewers see", () => {
-		expect(trimmedDuration(120, { start: 5, end: 60 })).toBe(55);
-		expect(trimmedDuration(120, { start: null, end: null })).toBe(120);
-		expect(trimmedDuration(120, { start: 20, end: null })).toBe(100);
-		expect(trimmedDuration(null, { start: 5, end: 60 })).toBeNull();
+		expect(visibleDuration(120, { start: 5, end: 60 }, [])).toBe(55);
+		expect(visibleDuration(120, { start: null, end: null }, [])).toBe(120);
+		expect(visibleDuration(120, { start: 20, end: null }, [])).toBe(100);
+		expect(visibleDuration(null, { start: 5, end: 60 }, [])).toBeNull();
+	});
+});
+
+describe("cuts", () => {
+	const noTrim = { start: null, end: null };
+
+	it("sorts, merges and tidies the sections an owner cuts out", () => {
+		expect(
+			normalizeCuts(
+				[
+					{ start: 40, end: 50 },
+					{ start: 10, end: 20 },
+					{ start: 19.5, end: 25 },
+					{ start: 70, end: 70.04 },
+				],
+				120,
+				noTrim,
+			),
+		).toEqual([
+			{ start: 10, end: 25 },
+			{ start: 40, end: 50 },
+		]);
+		expect(normalizeCuts(null, 120, noTrim)).toEqual([]);
+		expect(normalizeCuts([{ start: 100, end: 500 }], 120, noTrim)).toEqual([
+			{ start: 100, end: 120 },
+		]);
+	});
+
+	it("rejects cuts that are not sensible", () => {
+		expect(normalizeCuts("all", 120, noTrim)).toBe("invalid");
+		expect(normalizeCuts([{ start: 20, end: 10 }], 120, noTrim)).toBe(
+			"invalid",
+		);
+		expect(normalizeCuts([{ start: -1, end: 10 }], 120, noTrim)).toBe(
+			"invalid",
+		);
+		expect(normalizeCuts([{ start: "1", end: 10 }], 120, noTrim)).toBe(
+			"invalid",
+		);
+	});
+
+	it("rejects cuts that would leave nothing to watch", () => {
+		expect(normalizeCuts([{ start: 0, end: 119.5 }], 120, noTrim)).toBe(
+			"invalid",
+		);
+		expect(
+			normalizeCuts([{ start: 10, end: 59.5 }], 120, { start: 10, end: 60 }),
+		).toBe("invalid");
+	});
+
+	it("takes cuts off the length viewers see and hides what was said in them", () => {
+		const cuts = [{ start: 20, end: 50 }];
+		expect(visibleDuration(120, { start: 10, end: null }, cuts)).toBe(80);
+		const kept = visibleRanges(120, noTrim, cuts);
+		expect(
+			visibleSegments(
+				[
+					{ start: 0, end: 8, text: "shown" },
+					{ start: 22, end: 30, text: "cut" },
+					{ start: 48, end: 56, text: "partly shown" },
+				],
+				kept,
+			).map((item) => item.text),
+		).toEqual(["shown", "partly shown"]);
+		expect(
+			visibleChapters(
+				[
+					{ title: "Intro", start: 0 },
+					{ title: "Cut away", start: 20 },
+					{ title: "Starts in the cut", start: 45 },
+					{ title: "End", start: 90 },
+				],
+				visibleRanges(120, noTrim, [{ start: 20, end: 50 }]),
+			).map((item) => item.title),
+		).toEqual(["Intro", "Starts in the cut", "End"]);
 	});
 });
 
@@ -136,6 +220,7 @@ describe("comments and reactions", () => {
 			body: "Nice one",
 			timestampSeconds: 12.3,
 			parentId: null,
+			mentions: [],
 		});
 	});
 

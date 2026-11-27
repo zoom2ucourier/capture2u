@@ -1,7 +1,7 @@
 {
 	"display_information": {
 		"name": "Capture2u",
-		"description": "Plays Capture2u recordings inside Slack",
+		"description": "Plays Capture2u recordings in Slack and tells you when they are watched",
 		"background_color": "#1d4ed8"
 	},
 	"features": {
@@ -13,7 +13,14 @@
 	},
 	"oauth_config": {
 		"scopes": {
-			"bot": ["links:read", "links:write", "links.embed:write"]
+			"bot": [
+				"links:read",
+				"links:write",
+				"links.embed:write",
+				"chat:write",
+				"users:read",
+				"users:read.email"
+			]
 		}
 	},
 	"settings": {

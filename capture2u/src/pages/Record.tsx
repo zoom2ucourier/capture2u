@@ -1,7 +1,7 @@
 import type { DetectedDisplayRecordingMode } from "@cap/recorder-core/recorder-constants";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button, ButtonAnchor, ButtonLink } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { Alert } from "../components/common/Feedback";
@@ -12,6 +12,7 @@ import {
 	RecordingDot,
 	StreamVideo,
 } from "../components/RecordingControls";
+import { RecoveryBanner } from "../components/RecoveryBanner";
 import { formatDuration } from "../lib/api";
 import {
 	type BubblePosition,
@@ -46,6 +47,7 @@ export function RecordPage() {
 	const [cameraOn, setCameraOn] = useState(false);
 	const [cameraError, setCameraError] = useState<string | null>(null);
 	const [copied, setCopied] = useState(false);
+	const [copiedOnStop, setCopiedOnStop] = useState(false);
 	const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
 	const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
 	const cameraStreamRef = useRef<MediaStream | null>(null);
@@ -156,6 +158,7 @@ export function RecordPage() {
 		});
 
 	const startRecording = () => {
+		setCopiedOnStop(false);
 		void recorder.start({
 			mode,
 			microphoneId: microphoneId === NO_MICROPHONE ? null : microphoneId,
@@ -169,9 +172,22 @@ export function RecordPage() {
 
 	const copyLink = async () => {
 		if (!recorder.share) return;
-		await navigator.clipboard.writeText(recorder.share.url);
+		await navigator.clipboard.writeText(recorder.share.shareUrl);
 		setCopied(true);
 		window.setTimeout(() => setCopied(false), 2000);
+	};
+
+	// The link exists before the recording ends, so stopping can put it on the
+	// clipboard straight away. Browsers only allow that from the window that
+	// was clicked, which may be the floating one.
+	const stopRecording = (clickedWindow?: Window | null) => {
+		const link = recorder.share?.shareUrl;
+		if (link)
+			void (clickedWindow ?? window).navigator.clipboard
+				.writeText(link)
+				.then(() => setCopiedOnStop(true))
+				.catch(() => undefined);
+		recorder.stop();
 	};
 
 	return (
@@ -184,6 +200,8 @@ export function RecordPage() {
 					</p>
 				</div>
 			</div>
+
+			{!busy && <RecoveryBanner />}
 
 			{!busy && (
 				<Card
@@ -339,7 +357,7 @@ export function RecordPage() {
 					{recorder.notice && (
 						<p className="record__notice">{recorder.notice}</p>
 					)}
-					<RecordingControls recorder={recorder} />
+					<RecordingControls recorder={recorder} onStop={stopRecording} />
 					{cameraStream &&
 						recorder.preview &&
 						!recorder.preview.cameraInVideo && (
@@ -360,10 +378,15 @@ export function RecordPage() {
 					) : (
 						<p className="field__hint">
 							{floating.floatingWindow
-								? "The floating controls stay on top of your other windows. Keep this tab open while you record."
-								: "Keep this tab open while you record. You can switch to other windows."}
+								? "The floating controls stay on top of your other windows."
+								: "You can switch to other windows while you record."}
 						</p>
 					)}
+					<p className="field__hint">
+						Your video uploads as you record, so the link is ready the moment
+						you stop. If this tab closes by accident, open Capture2u again to
+						recover all but the last few seconds.
+					</p>
 				</div>
 			)}
 
@@ -372,6 +395,7 @@ export function RecordPage() {
 				createPortal(
 					<FloatingControls
 						recorder={recorder}
+						onStop={stopRecording}
 						cameraStream={cameraStream}
 						cameraPosition={cameraPositionRef}
 					/>,
@@ -387,7 +411,9 @@ export function RecordPage() {
 							? "Your video is ready"
 							: recorder.phase === "uploading"
 								? "Uploading your video"
-								: "Preparing your video…"
+								: recorder.share
+									? "Your link is ready"
+									: "Preparing your video…"
 					}
 					icon={
 						recorder.phase === "done" ? (
@@ -409,7 +435,7 @@ export function RecordPage() {
 								<input
 									className="form-input"
 									readOnly
-									value={recorder.share.url}
+									value={recorder.share.shareUrl}
 									aria-label="Share link"
 									onFocus={(event) => event.target.select()}
 								/>
@@ -426,7 +452,24 @@ export function RecordPage() {
 									{copied ? "Copied" : "Copy link"}
 								</Button>
 							</span>
+							{copiedOnStop && (
+								<p className="field__hint">
+									The link was copied when you stopped. Paste it anywhere.
+								</p>
+							)}
 						</div>
+					)}
+					{recorder.phase === "finishing" && recorder.share && (
+						<>
+							<progress
+								className="progress"
+								value={recorder.progress}
+								max={1}
+							/>
+							<p className="field__hint">
+								Finishing the upload. This takes a few seconds.
+							</p>
+						</>
 					)}
 					{recorder.phase === "uploading" && (
 						<>
@@ -456,6 +499,20 @@ export function RecordPage() {
 						</div>
 					)}
 				</Card>
+			)}
+
+			{!busy && (
+				<p className="record__extension">
+					<Icons.Puzzle size={16} />
+					<span>
+						Record from any page, draw on the screen and blur private details
+						with the{" "}
+						<Link to="/extension" className="link">
+							Capture2u Chrome extension
+						</Link>
+						.
+					</span>
+				</p>
 			)}
 		</div>
 	);
