@@ -21,7 +21,10 @@
 	"workers_dev": true,
 	// A custom domain, so Cloudflare creates the DNS record and certificate
 	// itself.
-	"routes": [{ "pattern": "capture.zoom2u.com", "custom_domain": true }],
+	"routes": [
+		{ "pattern": "capture.locate2u.com", "custom_domain": true },
+		{ "pattern": "capture.zoom2u.com", "custom_domain": true }
+	],
 	"triggers": { "crons": ["0 16 * * *"] },
 	// The database and the video bucket are both in Sydney. Running the Worker
 	// beside them, wherever the person is, makes every call that touches them
