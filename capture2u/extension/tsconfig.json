@@ -1,0 +1,36 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"useDefineForClassFields": true,
+		"lib": ["DOM", "DOM.Iterable", "ES2022"],
+		"allowJs": false,
+		"skipLibCheck": true,
+		"esModuleInterop": true,
+		"allowSyntheticDefaultImports": true,
+		"strict": true,
+		"forceConsistentCasingInFileNames": true,
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"allowImportingTsExtensions": true,
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"noEmit": true,
+		"jsx": "react-jsx",
+		"types": ["chrome", "node"],
+		"noUncheckedSideEffectImports": false,
+		"paths": {
+			"@cap/recorder-core": ["../../packages/recorder-core/src/index.ts"],
+			"@cap/recorder-core/*": ["../../packages/recorder-core/src/*"],
+			"@cap/web-domain": ["./shims/cap-web-domain.d.ts"]
+		}
+	},
+	"include": [
+		"src",
+		"shims",
+		"vite.config.ts",
+		"vite.shared.ts",
+		"vite.content.config.ts",
+		"vite.content-overlay.config.ts",
+		"vitest.config.ts"
+	]
+}

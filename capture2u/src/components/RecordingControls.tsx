@@ -7,13 +7,13 @@ import {
 	useState,
 } from "react";
 import { formatDuration } from "../lib/api";
+import type { RecorderPreview, useRecorder } from "../recorder/useRecorder";
 import {
 	BUBBLE_HEIGHT_FRACTION,
 	type BubblePosition,
 	type BubblePositionRef,
 	clampBubblePosition,
-} from "../recorder/cameraCompositor";
-import type { RecorderPreview, useRecorder } from "../recorder/useRecorder";
+} from "../recorder/videoCompositor";
 import { Button } from "./common/Button";
 import { Icons } from "./common/Icons";
 

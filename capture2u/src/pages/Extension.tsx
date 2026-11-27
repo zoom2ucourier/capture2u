@@ -109,7 +109,9 @@ export function ExtensionInstall() {
 			</div>
 			<Card title="What you get" icon={<Icons.Puzzle />}>
 				<ul className="extension-page__list">
-					<li>Start from the toolbar or with Alt+Shift+R on any page.</li>
+					<li>
+						Start and stop from the toolbar or with Alt+Shift+S on any page.
+					</li>
 					<li>Recording carries on when you close or change tabs.</li>
 					<li>Draw on the page and show where you click.</li>
 					<li>Blur private details on a page before they are recorded.</li>

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Capture2u</title>
+	</head>
+	<body>
+		<main class="stage">
+			<header class="brand">
+				<svg
+					class="brand-logo"
+					xmlns="http://www.w3.org/2000/svg"
+					fill="none"
+					viewBox="0 0 136 32"
+					aria-label="Capture2u"
+				>
+					<title>Capture2u</title>
+					<rect width="32" height="32" rx="8" fill="#2B93FF"></rect>
+					<circle
+						cx="16"
+						cy="16"
+						r="9"
+						fill="none"
+						stroke="#fff"
+						stroke-width="2.5"
+					></circle>
+					<circle cx="16" cy="16" r="4.5" fill="#fff"></circle>
+					<text
+						x="42"
+						y="22.6"
+						fill="currentColor"
+						font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+						font-size="19"
+						font-weight="600"
+						textLength="92"
+						lengthAdjust="spacingAndGlyphs"
+					>
+						Capture2u
+					</text>
+				</svg>
+			</header>
+			<svg class="doodle" viewBox="0 0 120 104" aria-hidden="true">
+				<defs>
+					<filter id="boil" x="-15%" y="-15%" width="130%" height="130%">
+						<feTurbulence
+							type="fractalNoise"
+							baseFrequency="0.05"
+							numOctaves="2"
+							seed="1"
+							result="noise"
+						>
+							<animate
+								attributeName="seed"
+								values="1;3;5;7"
+								dur="0.6s"
+								repeatCount="indefinite"
+								calcMode="discrete"
+							></animate>
+						</feTurbulence>
+						<feDisplacementMap
+							in="SourceGraphic"
+							in2="noise"
+							scale="3"
+							xChannelSelector="R"
+							yChannelSelector="G"
+						></feDisplacementMap>
+					</filter>
+				</defs>
+				<g class="doodle-boil">
+					<circle
+						class="doodle-stroke record-ring"
+						pathLength="1"
+						cx="60"
+						cy="52"
+						r="30"
+					></circle>
+					<circle class="record-dot" cx="60" cy="52" r="11"></circle>
+				</g>
+			</svg>
+			<h1>Record your screen</h1>
+			<p class="lede">
+				Pick what to share, press Start, and get a link when you stop.
+			</p>
+			<p id="recorder-note" class="paper-pill" hidden>
+				Chrome's own pages can't be recorded from, so the recorder opened
+				here.
+			</p>
+			<p id="installed-note" class="paper-pill" hidden>
+				Capture2u is installed. Sign in once with your work email and you're
+				ready to record.
+			</p>
+			<button id="open-recorder" type="button" class="cta primary">
+				Open the recorder
+			</button>
+			<ul class="tips">
+				<li>
+					<span class="tip-dot" aria-hidden="true"></span>
+					<span>
+						Click the Capture2u icon in the toolbar on any page to open the
+						recorder there.
+					</span>
+				</li>
+				<li>
+					<span class="tip-dot" aria-hidden="true"></span>
+					<span>
+						Press <kbd id="shortcut">Alt+Shift+S</kbd> to start recording with
+						your last settings, and again to stop.
+					</span>
+				</li>
+				<li>
+					<span class="tip-dot" aria-hidden="true"></span>
+					<span>
+						While recording, open the round badge to pause, draw on the page,
+						blur something private or turn click highlights off.
+					</span>
+				</li>
+			</ul>
+		</main>
+		<script type="module" src="/src/recorder/main.ts"></script>
+	</body>
+</html>

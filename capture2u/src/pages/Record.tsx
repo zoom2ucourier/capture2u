@@ -14,12 +14,12 @@ import {
 } from "../components/RecordingControls";
 import { RecoveryBanner } from "../components/RecoveryBanner";
 import { formatDuration } from "../lib/api";
+import { useFloatingWindow } from "../recorder/useFloatingWindow";
+import { useRecorder } from "../recorder/useRecorder";
 import {
 	type BubblePosition,
 	DEFAULT_BUBBLE_POSITION,
-} from "../recorder/cameraCompositor";
-import { useFloatingWindow } from "../recorder/useFloatingWindow";
-import { useRecorder } from "../recorder/useRecorder";
+} from "../recorder/videoCompositor";
 
 const MODES: {
 	value: DetectedDisplayRecordingMode;

@@ -1,0 +1,66 @@
+{
+	"manifest_version": 3,
+	"name": "Capture2u",
+	"short_name": "Capture2u",
+	"description": "Record your screen and share a link. For Locate2u staff.",
+	"version": "1.0.0",
+	"key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAt01KgO1E9NpY1jJ+WhAz+3S/ZCJB/ap06viCue34JGb/sZZ1sMj0ixXT/PYoFOb+IabxXpCsKS2rjnNXHvEVFwaw9tE5x2G6Hu4cjvn572C0xc0VpWQvO8VjGw/XjbAIYJdxbQ1y3PhCg61gQD/eja1+rmuFQ4ecOBUdIO2qb0nec9YuPfKssVaJdskOLpJ1iIa+arpyGIIwjhoQETCkcE5wuUF64im48/NTIE1jwpalEOE+OHFrx//sd2pL8I6qdOQ2LrXiRLS8gg3zvs9NqNszvnb7GW2CYR2l1skvchtMLd7lyZ71bNFlV8DFN36trdsp2IaJ12vt/b8UuRuBrQIDAQAB",
+	"homepage_url": "https://capture.locate2u.io/",
+	"minimum_chrome_version": "116",
+	"icons": {
+		"16": "icons/icon-16.png",
+		"32": "icons/icon-32.png",
+		"48": "icons/icon-48.png",
+		"128": "icons/icon-128.png"
+	},
+	"action": {
+		"default_title": "Record your screen with Capture2u",
+		"default_icon": {
+			"16": "icons/icon-16.png",
+			"32": "icons/icon-32.png",
+			"48": "icons/icon-48.png",
+			"128": "icons/icon-128.png"
+		}
+	},
+	"background": {
+		"service_worker": "assets/service-worker.js",
+		"type": "module"
+	},
+	"options_page": "options.html",
+	"commands": {
+		"toggle-recording": {
+			"suggested_key": {
+				"default": "Alt+Shift+S",
+				"mac": "Alt+Shift+S"
+			},
+			"description": "Start or stop a recording"
+		}
+	},
+	"permissions": [
+		"activeTab",
+		"identity",
+		"offscreen",
+		"scripting",
+		"storage",
+		"tabCapture"
+	],
+	"host_permissions": ["http://*/*", "https://*/*", "file:///*"],
+	"content_scripts": [
+		{
+			"matches": ["http://*/*", "https://*/*", "file:///*"],
+			"js": ["assets/content-bootstrap.js"],
+			"run_at": "document_idle"
+		}
+	],
+	"web_accessible_resources": [
+		{
+			"resources": ["icons/*", "content/overlay.js"],
+			"matches": ["http://*/*", "https://*/*", "file:///*"]
+		},
+		{
+			"resources": ["camera-preview.html", "popup.html"],
+			"matches": ["http://*/*", "https://*/*", "file:///*"],
+			"use_dynamic_url": true
+		}
+	]
+}

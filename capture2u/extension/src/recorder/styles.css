@@ -1,0 +1,79 @@
+@import "../shared/paper.css";
+
+.record-ring {
+	stroke-dasharray: 1;
+	stroke-dashoffset: 1;
+	animation: draw 0.8s ease 0.2s forwards;
+}
+
+.record-dot {
+	fill: var(--accent);
+	opacity: 0;
+	animation: fade-in 0.4s ease 0.9s forwards;
+}
+
+.stage .paper-pill {
+	margin-top: 18px;
+	max-width: 440px;
+	border-color: var(--track);
+	border-radius: 16px;
+	color: var(--ink-soft);
+	font-size: 13px;
+	text-align: left;
+}
+
+.stage .cta {
+	margin-top: 22px;
+	animation: fade-up 0.5s ease 0.2s both;
+}
+
+.tips {
+	display: grid;
+	gap: 10px;
+	width: min(440px, 100%);
+	margin: 30px 0 0;
+	padding: 18px 20px;
+	border: 1.5px solid var(--track);
+	border-radius: 16px;
+	background: #ffffff;
+	list-style: none;
+	text-align: left;
+	font-size: 13.5px;
+	line-height: 1.5;
+	color: var(--ink);
+	animation: fade-up 0.5s ease 0.25s both;
+}
+
+.tips li {
+	display: grid;
+	grid-template-columns: 8px 1fr;
+	gap: 12px;
+}
+
+.tip-dot {
+	width: 8px;
+	height: 8px;
+	margin-top: 7px;
+	border-radius: 50%;
+	background: var(--accent);
+}
+
+kbd {
+	padding: 1px 6px;
+	border: 1px solid var(--track);
+	border-radius: 5px;
+	background: var(--paper);
+	font: inherit;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.record-ring,
+	.record-dot,
+	.stage .cta,
+	.tips {
+		animation-duration: 0.01ms;
+		animation-delay: 0s;
+	}
+}

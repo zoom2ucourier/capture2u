@@ -19,12 +19,6 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { refusedStartStatus } from "../../shared/uploads";
 import {
-	type BubblePositionRef,
-	type CameraCompositor,
-	canCompositeCamera,
-	createCameraCompositor,
-} from "./cameraCompositor";
-import {
 	captureThumbnail,
 	captureTrackThumbnail,
 	pickRecordingFormat,
@@ -44,6 +38,12 @@ import {
 	uploadThumbnail,
 	uploadWholeFile,
 } from "./upload";
+import {
+	type BubblePositionRef,
+	canCompositeVideo,
+	createVideoCompositor,
+	type VideoCompositor,
+} from "./videoCompositor";
 
 export type RecorderPhase =
 	| "idle"
@@ -137,7 +137,7 @@ export function useRecorder() {
 	const recordingStreamRef = useRef<MediaStream | null>(null);
 	const streamsRef = useRef<MediaStream[]>([]);
 	const mixerRef = useRef<AudioMixer | null>(null);
-	const compositorRef = useRef<CameraCompositor | null>(null);
+	const compositorRef = useRef<VideoCompositor | null>(null);
 	const formatRef = useRef<RecordingFormat | null>(null);
 	const dimensionsRef = useRef<{ width?: number; height?: number }>({});
 	const timerRef = useRef<{
@@ -589,29 +589,34 @@ export function useRecorder() {
 				};
 
 				const cameraTrack = options.camera?.stream.getVideoTracks()[0];
+				const camera =
+					options.camera && cameraTrack?.readyState === "live"
+						? { track: cameraTrack, position: options.camera.position }
+						: null;
 				let cameraInVideo = false;
-				if (
-					options.camera &&
-					cameraTrack?.readyState === "live" &&
-					canCompositeCamera()
-				) {
+				if (canCompositeVideo()) {
+					let compositor: VideoCompositor | null = null;
 					try {
-						const compositor = createCameraCompositor({
+						compositor = createVideoCompositor({
 							screenTrack: videoTrack,
-							cameraTrack,
-							position: options.camera.position,
+							camera,
 						});
+						dimensionsRef.current = await compositor.ready;
 						compositorRef.current = compositor;
 						tracks[0] = compositor.track;
-						cameraInVideo = true;
+						cameraInVideo = camera !== null;
 					} catch {
-						setNotice("The camera could not be added to this recording.");
+						compositor?.stop();
+						if (videoTrack.readyState !== "live")
+							throw new Error("Screen sharing was stopped");
+						if (camera)
+							setNotice("The camera could not be added to this recording.");
 					}
 				}
 				setPreview({
 					stream: new MediaStream([videoTrack]),
-					width: settings.width ?? 16,
-					height: settings.height ?? 9,
+					width: dimensionsRef.current.width ?? settings.width ?? 16,
+					height: dimensionsRef.current.height ?? settings.height ?? 9,
 					cameraInVideo,
 					entireScreen: settings.displaySurface === "monitor",
 				});
