@@ -20,8 +20,9 @@
 	},
 	"workers_dev": true,
 	// locate2u.com is at Cloudflare's limit of 100 custom domains, so this is a
-	// plain route. It needs a proxied DNS record for "capture" in that zone
-	// (AAAA, 100::), which has to be added in the dashboard.
+	// plain route. The DNS record it needs exists because the empty R2 bucket
+	// capture2u-address has capture.locate2u.com attached as its custom domain;
+	// removing that bucket or its domain takes the address down.
 	"routes": [
 		{ "pattern": "capture.locate2u.com/*", "zone_name": "locate2u.com" }
 	],
