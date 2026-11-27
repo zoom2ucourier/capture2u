@@ -813,6 +813,33 @@ const runFirstPass = async () => {
 		await sleep(1500);
 		await screenshot(page, "06-recording.png");
 
+		// ---- restart -----------------------------------------------------
+		const firstTakeId = state.videoId;
+		await clickDockButton(page, "Restart recording");
+		await clickDockButton(
+			page,
+			"Click again to delete this take and start over",
+		);
+		const restarted = await waitFor(
+			async () =>
+				state.createBodies.length === 2 &&
+				state.videoId !== firstTakeId &&
+				(await recordingPhase(context)) === "recording",
+			{ timeout: 20_000, interval: 200 },
+		);
+		check(
+			"restart deletes the take and keeps recording as a new video",
+			Boolean(restarted) &&
+				state.deletedVideoIds.includes(firstTakeId) &&
+				state.abortBodies.length === 1,
+			JSON.stringify({
+				creates: state.createBodies.length,
+				deleted: state.deletedVideoIds,
+				aborts: state.abortBodies.length,
+			}),
+		);
+		await sleep(1500);
+
 		// ---- click highlights --------------------------------------------
 		const target = await page.locator("#target").boundingBox();
 		const clickX = target.x + target.width / 2;
@@ -1002,10 +1029,10 @@ const runFirstPass = async () => {
 			sharePage?.url() ?? "",
 		);
 
-		const created = state.createBodies[0] ?? {};
+		const created = state.createBodies[1] ?? {};
 		check(
 			"instant-recordings body matches Cap's (orgId, size, codecs)",
-			state.createBodies.length === 1 &&
+			state.createBodies.length === 2 &&
 				created.orgId === "locate2u" &&
 				created.width > 0 &&
 				created.height > 0 &&
@@ -1013,10 +1040,10 @@ const runFirstPass = async () => {
 				created.supportsUploadProgress === true,
 			JSON.stringify(created),
 		);
-		const initiated = state.initiateBodies[0] ?? {};
+		const initiated = state.initiateBodies[1] ?? {};
 		check(
-			"multipart initiate sent once with the raw-upload subpath",
-			state.initiateBodies.length === 1 &&
+			"multipart initiate sent once per take with the raw-upload subpath",
+			state.initiateBodies.length === 2 &&
 				initiated.videoId === state.videoId &&
 				/^raw-upload\.(mp4|webm)$/.test(initiated.subpath ?? ""),
 			JSON.stringify(initiated),
@@ -1065,17 +1092,18 @@ const runFirstPass = async () => {
 			`${state.progressBodies.length} update(s)`,
 		);
 
-		const thumbnail = await waitFor(() => state.thumbnails[0], {
-			timeout: 10_000,
-		});
+		const thumbnail = await waitFor(
+			() => state.thumbnails.find((entry) => entry.videoId === state.videoId),
+			{ timeout: 10_000 },
+		);
 		const size = thumbnail ? jpegSize(thumbnail.body) : null;
 		if (thumbnail) {
 			await writeFile(path.join(outputDir, "thumbnail.jpg"), thumbnail.body);
 		}
 		check(
 			"thumbnail uploaded as a JPEG within 1280x720 and 2 MB",
-			state.thumbnails.length === 1 &&
-				thumbnail.videoId === state.videoId &&
+			state.thumbnails.filter((entry) => entry.videoId === state.videoId)
+				.length === 1 &&
 				thumbnail.contentType === "image/jpeg" &&
 				thumbnail.body[0] === 0xff &&
 				thumbnail.body[1] === 0xd8 &&
@@ -1093,8 +1121,10 @@ const runFirstPass = async () => {
 			state.unauthorized.join(", "),
 		);
 		check(
-			"nothing was aborted or deleted",
-			state.abortBodies.length === 0 && state.deletedVideoIds.length === 0,
+			"only the restarted take was aborted and deleted",
+			state.abortBodies.length === 1 &&
+				state.deletedVideoIds.length === 1 &&
+				state.deletedVideoIds[0] === firstTakeId,
 		);
 
 		// ---- extension errors --------------------------------------------

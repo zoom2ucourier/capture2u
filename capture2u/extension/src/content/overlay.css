@@ -1107,6 +1107,12 @@
 	color: #ffffff;
 }
 
+.capture2u-dock-btn.is-restart.is-confirming {
+	background: #f97316;
+	color: #ffffff;
+	box-shadow: 0 2px 8px rgba(249, 115, 22, 0.35);
+}
+
 .capture2u-dock-btn.is-blur.is-active {
 	background: #2b93ff;
 	color: #ffffff;

@@ -146,6 +146,7 @@ export const startFakeServer = async () => {
 		authStarts: [],
 		videoId: `e2e-${Date.now().toString(36)}`,
 	};
+	state.firstVideoId = state.videoId;
 	let origin = "";
 
 	const json = (response, status, body, headers = {}) => {
@@ -262,6 +263,9 @@ export const startFakeServer = async () => {
 			) {
 				if (!requireBearer(request, response, pathname)) return;
 				state.createBodies.push(await readJson(request));
+				if (state.createBodies.length > 1) {
+					state.videoId = `${state.firstVideoId}-${state.createBodies.length}`;
+				}
 				json(response, 200, {
 					id: state.videoId,
 					shareUrl: `${origin}/v/${state.videoId}`,
@@ -334,6 +338,7 @@ export const startFakeServer = async () => {
 			if (method === "POST" && pathname === "/api/upload/multipart/abort") {
 				if (!requireBearer(request, response, pathname)) return;
 				state.abortBodies.push(await readJson(request));
+				state.parts.clear();
 				json(response, 200, { success: true });
 				return;
 			}

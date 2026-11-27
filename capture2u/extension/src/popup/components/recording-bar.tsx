@@ -102,6 +102,7 @@ interface RecordingBarProps {
 	disabled: boolean;
 	onStop: () => void;
 	onPauseResume: () => void;
+	onRestart: () => void;
 }
 
 export const RecordingBar = ({
@@ -110,6 +111,7 @@ export const RecordingBar = ({
 	disabled,
 	onStop,
 	onPauseResume,
+	onRestart,
 }: RecordingBarProps) => {
 	const isPaused = status.phase === "paused";
 	const canStop = !disabled;
@@ -160,7 +162,11 @@ export const RecordingBar = ({
 							<PauseCircle className="size-5" />
 						)}
 					</ActionButton>
-					<ActionButton disabled aria-label="Restart recording">
+					<ActionButton
+						onClick={onRestart}
+						disabled={!canTogglePause}
+						aria-label="Restart recording"
+					>
 						<RotateCcw className="size-5" />
 					</ActionButton>
 				</div>

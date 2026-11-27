@@ -2031,7 +2031,8 @@ const handleRequest = async (
 
 	if (
 		message.type === "pause-recording" ||
-		message.type === "resume-recording"
+		message.type === "resume-recording" ||
+		message.type === "restart-recording"
 	) {
 		const response = await forwardToOffscreen(message.type);
 		if (response.ok && response.status) {

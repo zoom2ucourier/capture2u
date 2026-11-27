@@ -521,6 +521,19 @@ function App() {
 			if (response.status) setStatus(response.status);
 		});
 
+	const restart = () => {
+		if (!window.confirm("Delete this take and start the recording over?"))
+			return;
+		return run(async () => {
+			const response = await sendServiceWorkerMessage({
+				target: "service-worker",
+				type: "restart-recording",
+			});
+			if (!response.ok) throw new Error(response.error);
+			if (response.status) setStatus(response.status);
+		});
+	};
+
 	const openOptions = () =>
 		sendServiceWorkerMessage({
 			target: "service-worker",
@@ -692,6 +705,7 @@ function App() {
 									disabled={busy}
 									onStop={() => void stop()}
 									onPauseResume={() => void pauseOrResume()}
+									onRestart={() => void restart()}
 								/>
 							</div>
 						)}

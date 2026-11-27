@@ -96,12 +96,30 @@ const UNCERTAIN_COMPLETION_MESSAGE =
 type ChunkingMode = "manual" | "timeslice";
 type RecordingSound = "start-recording" | "stop-recording";
 
-type ActiveRecording = {
-	recorder: MediaRecorder;
-	stopPromise: Promise<void>;
+type RecordingPipeline = NonNullable<ReturnType<typeof selectRecordingFormat>>;
+
+// The captured screen, microphone and mixed recording stream. A restart keeps
+// these and only replaces the server video, upload and local copy, so the
+// person is not asked to pick what to share again.
+type RecordingMedia = {
+	request: StartRecordingRequest;
 	streams: MediaStream[];
 	microphoneTracks: MediaStreamTrack[];
 	recordingStream: MediaStream;
+	videoTracks: MediaStreamTrack[];
+	width: number;
+	height: number;
+	fps: number;
+	compositor: VideoCompositor | null;
+	audioContext?: AudioContext;
+	playbackAudioContext?: AudioContext;
+	pipeline: RecordingPipeline;
+};
+
+type ActiveRecording = {
+	media: RecordingMedia;
+	recorder: MediaRecorder;
+	stopPromise: Promise<void>;
 	statusTimer: number | null;
 	spool: RecordingSpool;
 	uploader: InstantRecordingUploader;
@@ -116,9 +134,6 @@ type ActiveRecording = {
 	subpath: string;
 	mimeType: string;
 	thumbnail: ThumbnailCapture | null;
-	compositor: VideoCompositor | null;
-	audioContext?: AudioContext;
-	playbackAudioContext?: AudioContext;
 	chunkChain: Promise<void>;
 	dataRequestInterval: number | null;
 	chunkStartGuard: number | null;
@@ -717,26 +732,39 @@ const getRecordingDuration = (recording: ActiveRecording, now = Date.now()) =>
 		? recording.durationMs
 		: recording.durationMs + Math.max(0, now - recording.lastResumedAt);
 
+const stopSessionTimers = (recording: ActiveRecording) => {
+	if (recording.statusTimer !== null) {
+		window.clearInterval(recording.statusTimer);
+		recording.statusTimer = null;
+	}
+	stopManualChunking(recording);
+};
+
+const releaseRecordingMedia = async (media: RecordingMedia) => {
+	media.compositor?.stop();
+	for (const stream of media.streams) {
+		stopTracks(stream);
+	}
+	stopTracks(media.recordingStream);
+	await media.audioContext?.close().catch(() => undefined);
+	await media.playbackAudioContext?.close().catch(() => undefined);
+};
+
+const describeMicrophone = (tracks: MediaStreamTrack[]) =>
+	tracks.length === 0
+		? {}
+		: {
+				microphone: tracks.some((track) => track.enabled)
+					? ("live" as const)
+					: ("muted" as const),
+			};
+
 const cleanupActiveRecording = async (recording: ActiveRecording) => {
 	if (recording.cleanedUp) return;
 	recording.cleanedUp = true;
 	recording.thumbnail?.dispose();
-	recording.compositor?.stop();
-	if (recording.statusTimer !== null) {
-		window.clearInterval(recording.statusTimer);
-	}
-	if (recording.dataRequestInterval !== null) {
-		window.clearInterval(recording.dataRequestInterval);
-	}
-	if (recording.chunkStartGuard !== null) {
-		window.clearTimeout(recording.chunkStartGuard);
-	}
-	for (const stream of recording.streams) {
-		stopTracks(stream);
-	}
-	stopTracks(recording.recordingStream);
-	await recording.audioContext?.close().catch(() => undefined);
-	await recording.playbackAudioContext?.close().catch(() => undefined);
+	stopSessionTimers(recording);
+	await releaseRecordingMedia(recording.media);
 };
 
 // Reconcile the IndexedDB recording spool with the failed-recording metadata
@@ -892,94 +920,22 @@ const stopRecordingFromTrackEnd = () => {
 	);
 };
 
-const startRecording = async (request: StartRecordingRequest) => {
-	if (activeRecording || startInProgress || retryInProgress) {
-		// Thrown before this attempt owns anything, so the cleanup below must
-		// never run for it: a duplicate start would otherwise tear down — and
-		// delete server-side — the live recording it was rejected to protect.
-		throw new Error("Recording is already active");
-	}
-	startInProgress = true;
-	startCancelRequested = false;
-
-	// Everything acquired by THIS attempt. The failure path releases exactly
-	// these; module state like activeRecording is only touched when this
-	// attempt is the one that set it.
-	const ownedStreams: MediaStream[] = [];
+// Creates the server video, upload, local copy and MediaRecorder for already
+// captured media and starts recording. On failure it releases only what it
+// created itself; the caller owns the media.
+const openRecordingSession = async (
+	media: RecordingMedia,
+	beforeStart: () => Promise<void>,
+): Promise<RecordingStatus> => {
+	const { request, pipeline, width, height, fps, videoTracks } = media;
 	let ownedVideoId: string | null = null;
 	let ownedSpool: RecordingSpool | null = null;
 	let ownedRecording: ActiveRecording | null = null;
-	let ownedAudio: ReturnType<typeof addAudioTracks>;
-	let ownedCompositor: VideoCompositor | null = null;
-	let countdownPromise: Promise<void> | null = null;
 
 	try {
-		status = {
-			phase: "creating",
-			capturePending: request.mode !== "tab" && request.mode !== "camera",
-		};
-
-		const mainStream = await getMainStream(request);
-		status = { phase: "creating" };
-		ownedStreams.push(mainStream);
-		throwIfStartCanceled();
-		const captureSource = getCaptureSource(request, mainStream);
-		if (captureSource) {
-			broadcastCaptureSource(captureSource);
-		}
-		countdownPromise = runStartCountdown(request);
-		const microphoneStream = await getMicrophoneStream(
-			request.settings.microphone,
-		);
-		if (microphoneStream) {
-			ownedStreams.push(microphoneStream);
-		}
-		throwIfStartCanceled();
-		const streamSize = getStreamSize(mainStream);
-		let { width, height } = streamSize;
-		const { fps } = streamSize;
-		const videoTracks = mainStream.getVideoTracks();
-		const sourceVideoTrack = videoTracks[0];
-		if (!sourceVideoTrack) {
-			throw new Error("No video track was captured");
-		}
-		// A shared screen, window or tab can change size as sharing starts or
-		// when it is resized, and an MP4 whose picture changes size part-way
-		// plays back frozen or garbled. The compositor locks one size for the
-		// whole recording; this also gives the real size, which the track's own
-		// settings can get wrong.
-		let recordedVideoTrack = sourceVideoTrack;
-		if (canCompositeVideo()) {
-			try {
-				ownedCompositor = createVideoCompositor({
-					screenTrack: sourceVideoTrack,
-				});
-				const locked = await ownedCompositor.ready;
-				recordedVideoTrack = ownedCompositor.track;
-				width = locked.width;
-				height = locked.height;
-			} catch {
-				ownedCompositor?.stop();
-				ownedCompositor = null;
-			}
-			throwIfStartCanceled();
-		}
-		const recordingStream = new MediaStream([recordedVideoTrack]);
-		const streams = microphoneStream
-			? [mainStream, microphoneStream]
-			: [mainStream];
-		ownedAudio = addAudioTracks({
-			output: recordingStream,
-			streams,
-			playbackStream: request.mode === "tab" ? mainStream : null,
-		});
-		const hasAudio = recordingStream.getAudioTracks().length > 0;
-		const pipeline = selectRecordingFormat(hasAudio);
-		if (!pipeline) throw new Error("No supported recorder format is available");
-
 		const { videoCodec, audioCodec } = describeRecordingCodecs(
 			pipeline.mimeType,
-			hasAudio,
+			media.recordingStream.getAudioTracks().length > 0,
 		);
 		const creation = await createInstantRecording({
 			settings: request.settings,
@@ -1067,21 +1023,19 @@ const startRecording = async (request: StartRecordingRequest) => {
 			},
 		});
 
-		const recorder = new MediaRecorder(recordingStream, {
+		const recorder = new MediaRecorder(media.recordingStream, {
 			mimeType: pipeline.mimeType,
 		});
 
-		await countdownPromise;
+		await beforeStart();
 		throwIfStartCanceled();
 
 		const startedAt = Date.now();
 
 		const recording: ActiveRecording = {
+			media,
 			recorder,
 			stopPromise: Promise.resolve(),
-			streams,
-			microphoneTracks: microphoneStream?.getAudioTracks() ?? [],
-			recordingStream,
 			statusTimer: null,
 			spool,
 			uploader,
@@ -1096,9 +1050,6 @@ const startRecording = async (request: StartRecordingRequest) => {
 			subpath,
 			mimeType: pipeline.mimeType,
 			thumbnail: null,
-			compositor: ownedCompositor,
-			audioContext: ownedAudio?.audioContext,
-			playbackAudioContext: ownedAudio?.playbackAudioContext,
 			chunkChain: Promise.resolve(),
 			dataRequestInterval: null,
 			chunkStartGuard: null,
@@ -1211,9 +1162,7 @@ const startRecording = async (request: StartRecordingRequest) => {
 			startedAt,
 			durationMs: 0,
 			updatedAt: startedAt,
-			...(recording.microphoneTracks.length > 0
-				? { microphone: "live" as const }
-				: {}),
+			...describeMicrophone(media.microphoneTracks),
 		};
 
 		try {
@@ -1245,6 +1194,133 @@ const startRecording = async (request: StartRecordingRequest) => {
 		broadcastStatus();
 		return status;
 	} catch (error) {
+		if (ownedRecording) {
+			if (activeRecording === ownedRecording) {
+				activeRecording = null;
+			}
+			ownedRecording.thumbnail?.dispose();
+			stopSessionTimers(ownedRecording);
+		}
+		if (ownedVideoId) {
+			await deleteInstantRecording(
+				request.settings,
+				request.auth,
+				ownedVideoId,
+			).catch(() => undefined);
+		}
+		if (ownedSpool) {
+			await removeLiveRecordingManifest(ownedSpool.sessionId).catch(
+				() => undefined,
+			);
+			await ownedSpool.dispose().catch(() => undefined);
+		}
+		throw error;
+	}
+};
+
+const startRecording = async (request: StartRecordingRequest) => {
+	if (activeRecording || startInProgress || retryInProgress) {
+		// Thrown before this attempt owns anything, so the cleanup below must
+		// never run for it: a duplicate start would otherwise tear down — and
+		// delete server-side — the live recording it was rejected to protect.
+		throw new Error("Recording is already active");
+	}
+	startInProgress = true;
+	startCancelRequested = false;
+
+	// Everything acquired by THIS attempt. The failure path releases exactly
+	// these; module state like activeRecording is only touched when this
+	// attempt is the one that set it.
+	const ownedStreams: MediaStream[] = [];
+	let ownedAudio: ReturnType<typeof addAudioTracks>;
+	let ownedCompositor: VideoCompositor | null = null;
+	let ownedRecordingStream: MediaStream | null = null;
+	let countdownPromise: Promise<void> | null = null;
+
+	try {
+		status = {
+			phase: "creating",
+			capturePending: request.mode !== "tab" && request.mode !== "camera",
+		};
+
+		const mainStream = await getMainStream(request);
+		status = { phase: "creating" };
+		ownedStreams.push(mainStream);
+		throwIfStartCanceled();
+		const captureSource = getCaptureSource(request, mainStream);
+		if (captureSource) {
+			broadcastCaptureSource(captureSource);
+		}
+		const countdown = runStartCountdown(request);
+		countdownPromise = countdown;
+		const microphoneStream = await getMicrophoneStream(
+			request.settings.microphone,
+		);
+		if (microphoneStream) {
+			ownedStreams.push(microphoneStream);
+		}
+		throwIfStartCanceled();
+		const streamSize = getStreamSize(mainStream);
+		let { width, height } = streamSize;
+		const { fps } = streamSize;
+		const videoTracks = mainStream.getVideoTracks();
+		const sourceVideoTrack = videoTracks[0];
+		if (!sourceVideoTrack) {
+			throw new Error("No video track was captured");
+		}
+		// A shared screen, window or tab can change size as sharing starts or
+		// when it is resized, and an MP4 whose picture changes size part-way
+		// plays back frozen or garbled. The compositor locks one size for the
+		// whole recording; this also gives the real size, which the track's own
+		// settings can get wrong.
+		let recordedVideoTrack = sourceVideoTrack;
+		if (canCompositeVideo()) {
+			try {
+				ownedCompositor = createVideoCompositor({
+					screenTrack: sourceVideoTrack,
+				});
+				const locked = await ownedCompositor.ready;
+				recordedVideoTrack = ownedCompositor.track;
+				width = locked.width;
+				height = locked.height;
+			} catch {
+				ownedCompositor?.stop();
+				ownedCompositor = null;
+			}
+			throwIfStartCanceled();
+		}
+		const recordingStream = new MediaStream([recordedVideoTrack]);
+		ownedRecordingStream = recordingStream;
+		const streams = microphoneStream
+			? [mainStream, microphoneStream]
+			: [mainStream];
+		ownedAudio = addAudioTracks({
+			output: recordingStream,
+			streams,
+			playbackStream: request.mode === "tab" ? mainStream : null,
+		});
+		const hasAudio = recordingStream.getAudioTracks().length > 0;
+		const pipeline = selectRecordingFormat(hasAudio);
+		if (!pipeline) throw new Error("No supported recorder format is available");
+
+		return await openRecordingSession(
+			{
+				request,
+				streams,
+				microphoneTracks: microphoneStream?.getAudioTracks() ?? [],
+				recordingStream,
+				videoTracks,
+				width,
+				height,
+				fps,
+				compositor: ownedCompositor,
+				audioContext: ownedAudio?.audioContext,
+				playbackAudioContext: ownedAudio?.playbackAudioContext,
+				pipeline,
+			},
+			() => countdown,
+		);
+	} catch (error) {
 		chrome.runtime.sendMessage(
 			{
 				target: "service-worker",
@@ -1262,29 +1338,10 @@ const startRecording = async (request: StartRecordingRequest) => {
 		for (const stream of ownedStreams) {
 			stopTracks(stream);
 		}
-		if (ownedVideoId) {
-			await deleteInstantRecording(
-				request.settings,
-				request.auth,
-				ownedVideoId,
-			).catch(() => undefined);
-		}
-		if (!ownedRecording) ownedCompositor?.stop();
-		if (ownedRecording) {
-			if (activeRecording === ownedRecording) {
-				activeRecording = null;
-			}
-			await cleanupActiveRecording(ownedRecording);
-		} else {
-			await ownedAudio?.audioContext.close().catch(() => undefined);
-			await ownedAudio?.playbackAudioContext?.close().catch(() => undefined);
-		}
-		if (ownedSpool) {
-			await removeLiveRecordingManifest(ownedSpool.sessionId).catch(
-				() => undefined,
-			);
-			await ownedSpool.dispose().catch(() => undefined);
-		}
+		if (ownedRecordingStream) stopTracks(ownedRecordingStream);
+		ownedCompositor?.stop();
+		await ownedAudio?.audioContext.close().catch(() => undefined);
+		await ownedAudio?.playbackAudioContext?.close().catch(() => undefined);
 		// Reset the status this attempt set so later status syncs do not report
 		// a phantom in-progress recording. "recording" is already set before
 		// recorder.start(), so a throw there would otherwise leave a capture
@@ -1581,6 +1638,75 @@ const resumeRecording = () => {
 	return status;
 };
 
+// Throws away a take without touching its captured media: the recorder is
+// detached before it stops so its last chunk is not uploaded, then the
+// multipart upload is aborted and the server video and local copy deleted.
+const discardRecordingSession = async (recording: ActiveRecording) => {
+	recording.cleanedUp = true;
+	recording.thumbnail?.dispose();
+	stopSessionTimers(recording);
+	recording.recorder.ondataavailable = null;
+	recording.recorder.onerror = null;
+	if (recording.recorder.state !== "inactive") {
+		recording.recorder.stop();
+	}
+	await recording.uploader.cancel().catch(() => undefined);
+	await recording.chunkChain.catch(() => undefined);
+	const { settings, auth } = recording.media.request;
+	await deleteInstantRecording(settings, auth, recording.videoId).catch(
+		() => undefined,
+	);
+	await removeLiveRecordingManifest(recording.spool.sessionId).catch(
+		() => undefined,
+	);
+	await recording.spool.dispose().catch(() => undefined);
+};
+
+const restartRecording = async (): Promise<RecordingStatus> => {
+	const recording = activeRecording;
+	if (
+		!recording ||
+		recording.finalizePromise ||
+		startInProgress ||
+		retryInProgress ||
+		(status.phase !== "recording" && status.phase !== "paused")
+	) {
+		return status;
+	}
+	startInProgress = true;
+	startCancelRequested = false;
+	activeRecording = null;
+	// Stays a capturing phase so the service worker keeps the page overlays
+	// (camera bubble, recording bar) up while the new take is set up.
+	status = {
+		...status,
+		phase: "paused",
+		durationMs: 0,
+		updatedAt: Date.now(),
+		upload: undefined,
+		uploadStatus: undefined,
+	};
+	broadcastStatus();
+
+	try {
+		await discardRecordingSession(recording);
+		throwIfStartCanceled();
+		return await openRecordingSession(recording.media, async () => undefined);
+	} catch (error) {
+		await releaseRecordingMedia(recording.media);
+		status = isUserCancellationError(error)
+			? { phase: "idle" }
+			: {
+					phase: "error",
+					message: error instanceof Error ? error.message : String(error),
+				};
+		broadcastStatus();
+		return status;
+	} finally {
+		startInProgress = false;
+	}
+};
+
 // Re-upload a recording whose bytes are still spooled in IndexedDB after a
 // failed upload. A fresh multipart session is started for the same video and
 // the whole blob is re-sent.
@@ -1848,6 +1974,10 @@ const handleRequest = async (
 		return { ok: true, status: resumeRecording() };
 	}
 
+	if (message.type === "restart-recording") {
+		return { ok: true, status: await restartRecording() };
+	}
+
 	if (message.type === "connect-camera-preview") {
 		return { ok: true, answer: await connectCameraPreview(message) };
 	}
@@ -1887,8 +2017,8 @@ const handleRequest = async (
 
 	if (message.type === "toggle-microphone-mute") {
 		const recording = activeRecording;
-		if (recording && recording.microphoneTracks.length > 0) {
-			for (const track of recording.microphoneTracks) {
+		if (recording && recording.media.microphoneTracks.length > 0) {
+			for (const track of recording.media.microphoneTracks) {
 				track.enabled = !message.muted;
 			}
 			if (status.phase === "recording" || status.phase === "paused") {

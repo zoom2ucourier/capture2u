@@ -230,6 +230,11 @@ export type ResumeRecordingRequest = {
 	type: "resume-recording";
 };
 
+export type RestartRecordingRequest = {
+	target: "offscreen";
+	type: "restart-recording";
+};
+
 export type GetRecordingStatusRequest = {
 	target: "offscreen";
 	type: "get-recording-status";
@@ -306,6 +311,7 @@ export type OffscreenRequest =
 	| StopRecordingRequest
 	| PauseRecordingRequest
 	| ResumeRecordingRequest
+	| RestartRecordingRequest
 	| GetRecordingStatusRequest
 	| ConnectCameraPreviewRequest
 	| DisconnectCameraPreviewRequest
@@ -390,6 +396,10 @@ export type ServiceWorkerRequest =
 	| {
 			target: "service-worker";
 			type: "resume-recording";
+	  }
+	| {
+			target: "service-worker";
+			type: "restart-recording";
 	  }
 	| {
 			target: "service-worker";

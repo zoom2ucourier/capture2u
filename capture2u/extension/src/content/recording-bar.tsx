@@ -7,6 +7,7 @@ import {
 	Pause,
 	Pencil,
 	Play,
+	RotateCcw,
 	Square,
 	Video,
 	VideoOff,
@@ -62,7 +63,13 @@ type BarStatus = {
 	microphone?: "live" | "muted";
 };
 
-type BarControl = "stop-recording" | "pause-recording" | "resume-recording";
+type BarControl =
+	| "stop-recording"
+	| "pause-recording"
+	| "resume-recording"
+	| "restart-recording";
+
+const RESTART_CONFIRM_MS = 4000;
 
 type RecordingBarOverlayProps = {
 	recorderPanelOpen: boolean;
@@ -134,6 +141,7 @@ export function RecordingBarOverlay({
 	const [drawing, setDrawing] = useState(false);
 	const [blurActive, setBlurActive] = useState(false);
 	const [isExpanded, setIsExpanded] = useState(false);
+	const [confirmingRestart, setConfirmingRestart] = useState(false);
 	const [now, setNow] = useState(() => Date.now());
 	const dragOffsetRef = useRef({ x: 0, y: 0 });
 	const dragDistanceRef = useRef(0);
@@ -565,6 +573,28 @@ export function RecordingBarOverlay({
 		[applyResponse],
 	);
 
+	useEffect(() => {
+		if (!confirmingRestart) return;
+		const timer = window.setTimeout(
+			() => setConfirmingRestart(false),
+			RESTART_CONFIRM_MS,
+		);
+		return () => window.clearTimeout(timer);
+	}, [confirmingRestart]);
+
+	useEffect(() => {
+		if (!isExpanded) setConfirmingRestart(false);
+	}, [isExpanded]);
+
+	const restartRecording = useCallback(() => {
+		if (!confirmingRestart) {
+			setConfirmingRestart(true);
+			return;
+		}
+		setConfirmingRestart(false);
+		sendControl("restart-recording");
+	}, [confirmingRestart, sendControl]);
+
 	const toggleRecordingMicrophone = useCallback(() => {
 		const microphone = status?.microphone;
 		if (!microphone) return;
@@ -910,6 +940,26 @@ export function RecordingBarOverlay({
 									aria-hidden
 								/>
 							)}
+						</button>
+
+						<button
+							type="button"
+							className={classNames(
+								"capture2u-dock-btn is-restart",
+								confirmingRestart && "is-confirming",
+							)}
+							aria-label={
+								confirmingRestart
+									? "Click again to delete this take and start over"
+									: "Restart recording"
+							}
+							data-tooltip={
+								confirmingRestart ? "Click again to start over" : "Restart"
+							}
+							disabled={busy}
+							onClick={restartRecording}
+						>
+							<RotateCcw size={15} aria-hidden />
 						</button>
 
 						<button
