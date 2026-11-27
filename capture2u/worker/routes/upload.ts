@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { requireUser } from "../auth";
 import { adminClient, getVideo, type VideoRow } from "../db";
-import type { AppBindings, Env, SessionUser } from "../env";
+import type { AppBindings, Env, JobMessage, SessionUser } from "../env";
 import { createToken, verifyToken } from "../lib/tokens";
 import { isVideoId, videoObjectPrefix } from "../lib/util";
 
@@ -229,13 +229,12 @@ upload.post("/multipart/complete", requireUser, async (c) => {
 	let processingStarted = true;
 	try {
 		const origin = new URL(c.req.url).origin;
+		const jobs: JobMessage[] = [
+			{ type: "process-video", videoId: video.id, origin },
+		];
 		if (needsSeekableCopy)
-			await c.env.JOBS.send({
-				type: "optimize-video",
-				videoId: video.id,
-				origin,
-			});
-		await c.env.JOBS.send({ type: "process-video", videoId: video.id, origin });
+			jobs.unshift({ type: "optimize-video", videoId: video.id, origin });
+		await c.env.JOBS.sendBatch(jobs.map((body) => ({ body })));
 	} catch (queueError) {
 		processingStarted = false;
 		console.error("Could not queue processing", queueError);

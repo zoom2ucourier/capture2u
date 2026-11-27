@@ -21,6 +21,10 @@
 	"workers_dev": true,
 	"routes": [{ "pattern": "capture.locate2u.io", "custom_domain": true }],
 	"triggers": { "crons": ["0 16 * * *"] },
+	// The database and the video bucket are both in Sydney. Running the Worker
+	// beside them, wherever the person is, makes every call that touches them
+	// faster.
+	"placement": { "mode": "smart" },
 	"observability": { "enabled": true },
 	// Rewriting a long recording into a seekable file is steady CPU work.
 	"limits": { "cpu_ms": 300000 },
