@@ -7,6 +7,20 @@ import {
 
 type RemoteStreamOutcome = { stream: MediaStream } | { error: Error };
 
+// The camera link never leaves this computer, so there is no network jitter to
+// smooth over. Chrome still holds frames back by default, which makes the
+// bubble, and so the recording, lag behind the voice.
+const showFramesImmediately = (receiver: RTCRtpReceiver) => {
+	const tunable = receiver as RTCRtpReceiver & {
+		jitterBufferTarget?: number | null;
+		playoutDelayHint?: number;
+	};
+	try {
+		if ("jitterBufferTarget" in tunable) tunable.jitterBufferTarget = 0;
+		tunable.playoutDelayHint = 0;
+	} catch {}
+};
+
 export const connectCameraPreview = async (
 	settings: WebcamSettings,
 	sessionId: string,
@@ -25,6 +39,7 @@ export const connectCameraPreview = async (
 			resolve(outcome);
 		};
 		const handleTrack = (event: RTCTrackEvent) => {
+			showFramesImmediately(event.receiver);
 			received.stream = event.streams[0] ?? new MediaStream([event.track]);
 			finish({ stream: received.stream });
 		};

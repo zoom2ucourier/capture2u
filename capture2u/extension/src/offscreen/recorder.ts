@@ -483,18 +483,30 @@ const openUserMedia = async (
 	throw lastError ?? new Error("Failed to open the capture device");
 };
 
+// The bubble is at most a few hundred pixels across, so a small, steady camera
+// picture is plenty, and it keeps the live link to the bubble quick.
+const CAMERA_PICTURE: MediaTrackConstraints = {
+	width: { ideal: 640 },
+	height: { ideal: 480 },
+	frameRate: { ideal: 30, max: 30 },
+};
+
 const getCameraMediaStream = (webcam: WebcamSettings) => {
 	const constraints: MediaStreamConstraints[] = [];
 	if (webcam.deviceId && webcam.deviceId !== DEFAULT_CAMERA_DEVICE_ID) {
 		constraints.push({
-			video: { deviceId: { exact: webcam.deviceId } },
+			video: { ...CAMERA_PICTURE, deviceId: { exact: webcam.deviceId } },
 			audio: false,
 		});
 		constraints.push({
-			video: { deviceId: { ideal: webcam.deviceId } },
+			video: { ...CAMERA_PICTURE, deviceId: { ideal: webcam.deviceId } },
 			audio: false,
 		});
 	}
+	constraints.push({
+		video: CAMERA_PICTURE,
+		audio: false,
+	});
 	constraints.push({
 		video: true,
 		audio: false,
@@ -1897,6 +1909,16 @@ const queryMediaPermissions = async (): Promise<MediaPermissionSnapshot> => {
 	return { camera, microphone };
 };
 
+// Under load, keep frames coming on time and drop sharpness instead, so the
+// face in the bubble stays in step with the voice.
+const preferFrameRate = (sender: RTCRtpSender) => {
+	const parameters = sender.getParameters() as RTCRtpSendParameters & {
+		degradationPreference?: string;
+	};
+	parameters.degradationPreference = "maintain-framerate";
+	void sender.setParameters(parameters).catch(() => undefined);
+};
+
 const connectCameraPreview = async (request: ConnectCameraPreviewRequest) => {
 	disconnectCameraPreview(request.sessionId);
 	const peer = new RTCPeerConnection();
@@ -1941,7 +1963,8 @@ const connectCameraPreview = async (request: ConnectCameraPreviewRequest) => {
 
 		await peer.setRemoteDescription(request.offer);
 		for (const track of stream.getVideoTracks()) {
-			peer.addTrack(track, stream);
+			track.contentHint = "motion";
+			preferFrameRate(peer.addTrack(track, stream));
 		}
 		await peer.setLocalDescription(await peer.createAnswer());
 		await waitForIceGatheringComplete(peer);
