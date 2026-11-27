@@ -19,7 +19,14 @@
 		]
 	},
 	"workers_dev": true,
-	"routes": [{ "pattern": "capture.locate2u.io", "custom_domain": true }],
+	// The app lives at capture.locate2u.com. locate2u.com is at its limit of
+	// custom domains, so this is a plain route and needs a proxied DNS record
+	// for "capture" in that zone. The old locate2u.io address is kept so links
+	// already shared keep working.
+	"routes": [
+		{ "pattern": "capture.locate2u.com/*", "zone_name": "locate2u.com" },
+		{ "pattern": "capture.locate2u.io", "custom_domain": true }
+	],
 	"triggers": { "crons": ["0 16 * * *"] },
 	// The database and the video bucket are both in Sydney. Running the Worker
 	// beside them, wherever the person is, makes every call that touches them

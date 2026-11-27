@@ -67,7 +67,7 @@ Already created on the Locate Technologies accounts:
 - Queue `capture2u-jobs`.
 
 - Email sending for `capture2u.locate2u.com` (Cloudflare Email Sending). Sign-in codes come from `no-reply@capture2u.locate2u.com`; set `EMAIL_FROM` to use another address on an onboarded domain.
-- The app's address, `https://capture.locate2u.io`, attached to the Worker as a custom domain (`routes` in `wrangler.jsonc`). It also answers at `https://capture2u.steve-590.workers.dev`.
+- The app's address, `https://capture.locate2u.com`: a route in `wrangler.jsonc` plus a proxied DNS record for `capture` in the `locate2u.com` zone (`AAAA`, `100::`), because that zone is at its limit of custom domains. It also answers at `https://capture2u.steve-590.workers.dev` and at the old address `https://capture.locate2u.io`, which is kept so links already shared keep working. The app moved off `locate2u.io` in November 2026 because Google Safe Browsing had listed that whole domain, so browsers showed a "Dangerous site" warning on every address under it.
 
 The `SUPABASE_SERVICE_ROLE_KEY` secret is set on the Worker. Still to do by hand:
 

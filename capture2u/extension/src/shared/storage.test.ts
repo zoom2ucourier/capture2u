@@ -158,8 +158,24 @@ describe("settings", () => {
 	it("points a fresh install at Capture2u with click highlights on", async () => {
 		const settings = await loadSettings();
 
-		expect(settings.apiBaseUrl).toBe("https://capture.locate2u.io");
+		expect(settings.apiBaseUrl).toBe("https://capture.locate2u.com");
 		expect(settings.clickHighlights).toEqual({ enabled: true });
+	});
+
+	it("moves an install saved at the old address to the new one", async () => {
+		await saveSettings({
+			...defaultSettings,
+			apiBaseUrl: "https://capture.locate2u.io",
+		});
+		expect((await loadSettings()).apiBaseUrl).toBe(
+			"https://capture.locate2u.com",
+		);
+
+		await saveSettings({
+			...defaultSettings,
+			apiBaseUrl: "http://localhost:8787",
+		});
+		expect((await loadSettings()).apiBaseUrl).toBe("http://localhost:8787");
 	});
 
 	it("turns click highlights on for settings saved before the option existed", async () => {
