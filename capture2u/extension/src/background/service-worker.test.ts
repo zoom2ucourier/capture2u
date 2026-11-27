@@ -347,7 +347,7 @@ describe("recording status synchronization", () => {
 		{
 			phase: "completed",
 			videoId: "video" as VideoId,
-			shareUrl: "https://capture.zoom2u.com/v/video",
+			shareUrl: "https://capture.locate2u.com/v/video",
 		},
 		{ phase: "error", message: "Upload failed", recoverable: true },
 	] satisfies RecordingStatus[])(
@@ -601,7 +601,7 @@ describe("keyboard shortcut", () => {
 		stored[AUTH_KEY] = auth;
 		stored["capture2u-bootstrap-cache"] = { bootstrap, cachedAt: Date.now() };
 		stored["capture2u-settings"] = {
-			apiBaseUrl: "https://capture.zoom2u.com",
+			apiBaseUrl: "https://capture.locate2u.com",
 			capture: { recordingMode: "window", camera: null, microphone: null },
 			webcam: { enabled: false, deviceId: null },
 			microphoneWarning: { enabled: false },

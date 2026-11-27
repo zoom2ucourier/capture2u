@@ -4,7 +4,7 @@ import type { ExtensionSettings } from "./types";
 
 const auth = { authApiKey: "fixture-key", userId: "account" };
 const settings = {
-	apiBaseUrl: "https://capture.zoom2u.com",
+	apiBaseUrl: "https://capture.locate2u.com",
 } as ExtensionSettings;
 
 const signInError = (apiBaseUrl: string) =>
@@ -34,7 +34,7 @@ describe("sign-in when the auth route can't be reached", () => {
 
 	it("tells everyone but a local developer to check their connection", async () => {
 		for (const apiBaseUrl of [
-			"https://capture.zoom2u.com",
+			"https://capture.locate2u.com",
 			"https://capture.example.com",
 		]) {
 			const message = await signInError(apiBaseUrl);
@@ -68,7 +68,7 @@ describe("sign-in handoff", () => {
 		const url = new URL(start.url);
 
 		expect(url.origin + url.pathname).toBe(
-			"https://capture.zoom2u.com/api/extension/auth/start",
+			"https://capture.locate2u.com/api/extension/auth/start",
 		);
 		expect(url.searchParams.get("redirectUri")).toBe(
 			"https://abc.chromiumapp.org/",
@@ -106,7 +106,7 @@ describe("thumbnail upload", () => {
 		await uploadThumbnail({ settings, auth, videoId: "video 1", image });
 
 		expect(request).toHaveBeenCalledWith(
-			"https://capture.zoom2u.com/api/upload/thumbnail/video%201",
+			"https://capture.locate2u.com/api/upload/thumbnail/video%201",
 			expect.objectContaining({
 				method: "PUT",
 				headers: {

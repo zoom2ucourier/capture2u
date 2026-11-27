@@ -27,12 +27,12 @@ export const MEDIA_ACCESS_KEY = "capture2u-media-access";
 export const FAILED_RECORDINGS_KEY = "capture2u-failed-recordings";
 const OVERLAY_TOKENS_KEY = "capture2u-overlay-tokens";
 const LAST_WEBCAM_PREVIEW_FRAME_KEY = "capture2u-last-webcam-preview-frame";
-export const DEFAULT_API_BASE_URL = "https://capture.zoom2u.com";
+export const DEFAULT_API_BASE_URL = "https://capture.locate2u.com";
 // Where the app lived before it moved. An install that saved one of these
 // follows the move; any other saved address was typed in on purpose.
 const RETIRED_API_BASE_URLS = new Set([
 	"https://capture.locate2u.io",
-	"https://capture.locate2u.com",
+	"https://capture.zoom2u.com",
 ]);
 
 export type MediaAccessState = {

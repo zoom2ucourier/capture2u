@@ -36,7 +36,7 @@ describe("extension message contracts", () => {
 			status: {
 				phase: "completed",
 				videoId: "v",
-				shareUrl: "https://capture.zoom2u.com",
+				shareUrl: "https://capture.locate2u.com",
 			},
 		};
 		expect(isRecordingStatusBroadcast(message)).toBe(true);

@@ -275,7 +275,7 @@ describe("folders", () => {
 });
 
 describe("embed and Slack", () => {
-	const BASE = "https://capture.zoom2u.com";
+	const BASE = "https://capture.locate2u.com";
 	const NOW = Date.UTC(2026, 10, 25);
 	const timestamp = String(Math.floor(NOW / 1000));
 	const body = JSON.stringify({ type: "event_callback" });

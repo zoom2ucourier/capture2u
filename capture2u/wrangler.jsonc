@@ -19,11 +19,11 @@
 		]
 	},
 	"workers_dev": true,
-	// A custom domain, so Cloudflare creates the DNS record and certificate
-	// itself.
+	// locate2u.com is at Cloudflare's limit of 100 custom domains, so this is a
+	// plain route. It needs a proxied DNS record for "capture" in that zone
+	// (AAAA, 100::), which has to be added in the dashboard.
 	"routes": [
-		{ "pattern": "capture.locate2u.com", "custom_domain": true },
-		{ "pattern": "capture.zoom2u.com", "custom_domain": true }
+		{ "pattern": "capture.locate2u.com/*", "zone_name": "locate2u.com" }
 	],
 	"triggers": { "crons": ["0 16 * * *"] },
 	// The database and the video bucket are both in Sydney. Running the Worker
